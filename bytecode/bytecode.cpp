@@ -19,10 +19,10 @@ void Bytecode::read() {
 
 void Bytecode::read_header() {
 	read_file(5);
-	assert(fileBuffer[0] == BC_HEADER_1 && fileBuffer[1] == BC_HEADER_2 && fileBuffer[2] == BC_HEADER_3,
-		"Invalid header:\nExpected bytes " + byte_to_string(BC_HEADER_1) + " " + byte_to_string(BC_HEADER_2) + " " + byte_to_string(BC_HEADER_3)
+	assert(fileBuffer[0] == BC_HEADER[0] && fileBuffer[1] == BC_HEADER[1] && fileBuffer[2] == BC_HEADER[2],
+		"Invalid header:\nExpected bytes " + byte_to_string(BC_HEADER[0]) + " " + byte_to_string(BC_HEADER[1]) + " " + byte_to_string(BC_HEADER[2])
 		+ ", got " + byte_to_string(fileBuffer[0]) + " " + byte_to_string(fileBuffer[1]) + " " + byte_to_string(fileBuffer[2])
-		+ "\n\nFile may not contain LuaJIT bytecode", filePath, DEBUG_INFO);
+		+ "\n\nFile does not contain valid LuaJIT bytecode", filePath, DEBUG_INFO);
 	header.version = fileBuffer[3];
 	assert(header.version == BC_VERSION_1 || header.version == BC_VERSION_2, "Invalid bytecode version (" + byte_to_string(fileBuffer[3]) + ")", filePath, DEBUG_INFO);
 	header.flags = fileBuffer[4];

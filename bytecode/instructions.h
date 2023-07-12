@@ -86,10 +86,10 @@ enum BC_OP {
 	BC_OP_ITERL, // end of generic for loop; start at D<JUMP>
 	BC_OP_IITERL, // unsupported
 	BC_OP_JITERL, // unsupported
-	BC_OP_LOOP, // if D<JUMP> == 32767 then end of goto loop else start of while/repeat loop; exit at D
+	BC_OP_LOOP, // if D<JUMP> == 32767 then goto loop else while/repeat loop; exit at D
 	BC_OP_ILOOP, // unsupported
 	BC_OP_JLOOP, // unsupported
-	BC_OP_JMP, // goto D<JUMP> or if false then JMP or goto ITERC at D
+	BC_OP_JMP, // goto D<JUMP> or if true then JMP or goto ITERC at D
 	BC_OP_FUNCF, // unsupported
 	BC_OP_IFUNCF, // unsupported
 	BC_OP_JFUNCF, // unsupported

@@ -1,6 +1,4 @@
-static constexpr uint8_t BC_HEADER_1 = 0x1B;
-static constexpr uint8_t BC_HEADER_2 = 0x4C;
-static constexpr uint8_t BC_HEADER_3 = 0x4A;
+static constexpr uint8_t BC_HEADER[] = { '\x1B', 'L', 'J' };
 static constexpr uint8_t BC_VERSION_1 = 1;
 static constexpr uint8_t BC_VERSION_2 = 2;
 static constexpr uint8_t BC_F_BE = 0x01;
