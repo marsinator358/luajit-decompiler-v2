@@ -1,7 +1,15 @@
 class Ast {
 private:
 
-	static constexpr uint32_t ID_EMPTY = -1;
+	static constexpr uint32_t INVALID_ID = -1;
+
+	enum ConstantType {
+		INVALID_CONSTANT,
+		NIL_CONSTANT,
+		BOOL_CONSTANT,
+		NUMBER_CONSTANT
+	};
+
 	struct Expression;
 	struct Constant;
 	struct Variable;
@@ -20,9 +28,9 @@ public:
 	Ast(const Bytecode& bytecode);
 	~Ast();
 
-	void build();
+	void operator()();
 
-	Function chunk;
+	Function* chunk = nullptr;
 
 private:
 	
@@ -52,18 +60,6 @@ private:
 	static uint32_t get_extended_id_from_statement(Statement* const& statement);
 	static void check_valid_name(Constant* const& constant);
 	void check_special_number(Expression* const& expression, const bool& convertInfinity);
-
-	struct ConstantType {
-		enum {
-			INVALID_CONSTANT,
-			FALSY_CONSTANT,
-			TRUTHY_CONSTANT,
-			NUMBER_CONSTANT
-		} type = INVALID_CONSTANT;
-
-		double number = 0;
-	};
-
 	static ConstantType get_constant_type(Expression* const& expression);
 
 	const Bytecode& bytecode;
@@ -71,4 +67,5 @@ private:
 	std::vector<Statement*> statements;
 	std::vector<Function*> functions;
 	std::vector<Expression*> expressions;
+	uint32_t functionsComplete = 0;
 };

@@ -2,7 +2,7 @@
 
 Bytecode::Prototype::Prototype(const Bytecode& bytecode) : bytecode(bytecode) {}
 
-void Bytecode::Prototype::read(std::vector<Prototype*>& unlinkedPrototypes) {
+void Bytecode::Prototype::operator()(std::vector<Prototype*>& unlinkedPrototypes) {
 	read_header();
 	read_instructions();
 	read_upvalues();

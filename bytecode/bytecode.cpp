@@ -10,7 +10,7 @@ Bytecode::~Bytecode() {
 	}
 }
 
-void Bytecode::read() {
+void Bytecode::operator()() {
 	open_file();
 	read_header();
 	read_prototypes();
@@ -36,25 +36,30 @@ void Bytecode::read_header() {
 
 void Bytecode::read_prototypes() {
 	std::vector<Prototype*> unlinkedPrototypes;
+	print_loading_bar();
 
 	while (buffer_next_block()) {
 		assert(fileBuffer.size() >= MIN_PROTO_SIZE, "Prototype is too short", filePath, DEBUG_INFO);
 		prototypes.emplace_back(new Prototype(*this));
-		prototypes.back()->read(unlinkedPrototypes);
+		(*prototypes.back())(unlinkedPrototypes);
+		print_loading_bar(fileSize - bytesUnread, fileSize);
 	}
 
+	erase_loading_bar();
 	assert(unlinkedPrototypes.size() == 1, "Failed to link main prototype", filePath, DEBUG_INFO);
 	main = unlinkedPrototypes.back();
 	prototypes.shrink_to_fit();
+	prototypeCount = prototypes.size();
 }
 
 void Bytecode::open_file() {
 	file = CreateFileA(filePath.c_str(), GENERIC_READ, NULL, NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL | FILE_FLAG_SEQUENTIAL_SCAN, NULL);
 	assert(file != INVALID_HANDLE_VALUE, "Unable to open file", filePath, DEBUG_INFO);
 	DWORD fileSizeHigh = 0;
-	bytesUnread = GetFileSize(file, &fileSizeHigh);
-	bytesUnread |= (uint64_t)fileSizeHigh << 32;
-	assert(bytesUnread >= MIN_FILE_SIZE, "File is too small or empty", filePath, DEBUG_INFO);
+	fileSize = GetFileSize(file, &fileSizeHigh);
+	fileSize |= (uint64_t)fileSizeHigh << 32;
+	assert(fileSize >= MIN_FILE_SIZE, "File is too small or empty", filePath, DEBUG_INFO);
+	bytesUnread = fileSize;
 }
 
 void Bytecode::close_file() {

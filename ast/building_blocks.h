@@ -115,7 +115,6 @@ struct Ast::Constant {
 };
 
 enum AST_VARIABLE {
-	AST_VARIABLE_UNUSED,
 	AST_VARIABLE_SLOT,
 	AST_VARIABLE_UPVALUE,
 	AST_VARIABLE_GLOBAL,
@@ -219,12 +218,12 @@ struct Ast::Statement {
 		uint8_t b = 0;
 		uint8_t c = 0;
 		uint16_t d = 0;
-		uint32_t target = ID_EMPTY;
+		uint32_t target = INVALID_ID;
 
 		struct {
-			uint32_t id = ID_EMPTY;
+			uint32_t id = INVALID_ID;
 			uint32_t lineOffset = 0;
-			uint32_t attachedLabel = ID_EMPTY;
+			uint32_t attachedLabel = INVALID_ID;
 		} info;
 	} instruction;
 
@@ -233,7 +232,7 @@ struct Ast::Statement {
 	Local* locals = nullptr;
 
 	struct {
-		uint32_t jumpId = ID_EMPTY;
+		uint32_t jumpId = INVALID_ID;
 		bool allowSlotSwap = false;
 		bool swapped = false;
 	} condition;
@@ -252,6 +251,7 @@ struct Ast::Statement {
 
 		bool isPotentialMethod = false;
 		bool isTableConstructor = false;
+		ConstantType allowedConstantType = NUMBER_CONSTANT;
 		std::vector<Variable> variables;
 		std::vector<Expression*> expressions;
 		std::vector<uint8_t> usedSlots;
@@ -263,15 +263,15 @@ struct Ast::Statement {
 struct Ast::Local {
 	std::vector<std::string> names;
 	uint8_t baseSlot = 0;
-	uint32_t scopeBegin = ID_EMPTY;
-	uint32_t scopeEnd = ID_EMPTY;
+	uint32_t scopeBegin = INVALID_ID;
+	uint32_t scopeEnd = INVALID_ID;
 };
 
 struct Ast::SlotScope {
 	SlotScope* slotScope = this;
 	std::string* name = nullptr;
-	uint32_t scopeBegin = ID_EMPTY;
-	uint32_t scopeEnd = ID_EMPTY;
+	uint32_t scopeBegin = INVALID_ID;
+	uint32_t scopeEnd = INVALID_ID;
 	uint32_t usages = 0;
 };
 
@@ -283,7 +283,7 @@ struct Ast::Function {
 	};
 
 	struct Label {
-		uint32_t target = ID_EMPTY;
+		uint32_t target = INVALID_ID;
 		std::vector<uint32_t> jumpIds;
 	};
 
@@ -339,6 +339,7 @@ struct Ast::Function {
 		}
 	}
 
+	/*
 	uint32_t get_next_reachable_id(const uint32_t& lastReachableId) {
 		for (uint32_t i = 0; i < labels.size(); i++) {
 			if (labels[i].target <= lastReachableId || labels[i].jumpIds.front() > lastReachableId) continue;
@@ -351,8 +352,9 @@ struct Ast::Function {
 			return nextReachableId;
 		}
 
-		return ID_EMPTY;
+		return INVALID_ID;
 	}
+	*/
 
 	uint32_t get_label_from_id(const uint32_t& id) {
 		for (uint32_t i = labels.size(); i-- && labels[i].target >= id;) {
@@ -360,18 +362,18 @@ struct Ast::Function {
 			return i;
 		}
 
-		return ID_EMPTY;
+		return INVALID_ID;
 	}
 
-    bool is_valid_label(const uint32_t& label) {
-        return label != ID_EMPTY && labels[label].jumpIds.size();
-    }
+	bool is_valid_label(const uint32_t& label) {
+		return label != INVALID_ID && labels[label].jumpIds.size();
+	}
 
 	uint32_t get_scope_begin_from_label(const uint32_t& label, const uint32_t& scopeEnd) {
 		uint32_t scopeBegin = labels[label].target - 1;
 
 		for (uint32_t i = label; i < labels.size() && labels[i].target <= scopeEnd; i++) {
-			if (labels[i].jumpIds.front() <= scopeBegin) scopeBegin = labels[i].jumpIds.front() - 1;
+			if (labels[i].jumpIds.size() && labels[i].jumpIds.front() <= scopeBegin) scopeBegin = labels[i].jumpIds.front() - 1;
 		}
 
 		return scopeBegin;
@@ -381,25 +383,22 @@ struct Ast::Function {
 		uint32_t scopeEnd = labels[label].target;
 
 		for (uint32_t i = label; i < labels.size() && labels[i].target <= scopeEnd; i++) {
-			if (labels[i].jumpIds.back() > scopeEnd) scopeEnd = labels[i].jumpIds.back();
+			if (labels[i].jumpIds.size() && labels[i].jumpIds.back() > scopeEnd) scopeEnd = labels[i].jumpIds.back();
 		}
 
 		return scopeEnd;
 	}
 
-	/*
-	bool is_valid_block_range(const uint32_t& blockStartId, const uint32_t& blockEndId) {
-		for (uint32_t i = 0; i < labels.size() && labels[i].target <= blockEndId; i++) {
-			if (labels[i].target != blockStartId) continue;
-
-			for (uint32_t j = 0; j < labels[i].gotoIds.size(); j++) {
-				if (labels[i].gotoIds[j] < blockStartId || labels[i].gotoIds[j] > blockEndId) return false;
-			}
+	bool is_valid_block_range(const uint32_t& blockBegin, const uint32_t& blockEnd) {
+		for (uint32_t i = labels.size(); i-- && labels[i].target >= blockBegin;) {
+			if (labels[i].jumpIds.size()
+				&& labels[i].target <= blockEnd
+				&& (labels[i].jumpIds.front() < blockBegin
+					|| labels[i].jumpIds.back() > blockEnd)) return false;
 		}
 
 		return true;
 	}
-	*/
 
 	const Bytecode::Prototype& prototype;
 	uint32_t level = 0;
@@ -422,22 +421,22 @@ struct Ast::Function {
 				UPVALUE_CLOSE
 			} type;
 
-			uint32_t id = ID_EMPTY;
-			uint32_t target = ID_EMPTY;
+			uint32_t id = INVALID_ID;
+			uint32_t target = INVALID_ID;
 			std::vector<uint8_t> upvalues;
 			uint16_t upvalueClose = 0;
 		};
 
 		struct UpvalueScope {
 			uint8_t slot = 0;
-			uint32_t minScopeBegin = ID_EMPTY;
-			uint32_t minScopeEnd = ID_EMPTY;
+			uint32_t minScopeBegin = INVALID_ID;
+			uint32_t minScopeEnd = INVALID_ID;
 		};
 
 		struct SlotInfo {
 			bool isParameter = false;
 			SlotScope** activeSlotScope = nullptr;
-			uint32_t minScopeBegin = ID_EMPTY;
+			uint32_t minScopeBegin = INVALID_ID;
 			std::vector<SlotScope**> slotScopes;
 		};
 
@@ -591,20 +590,20 @@ struct Ast::Function {
 
 		void complete_scope(const uint8_t& slot, SlotScope**& slotScope, const uint32_t& id) {
 			if (slotInfos[slot].isParameter
-				|| (slotInfos[slot].minScopeBegin != ID_EMPTY
+				|| (slotInfos[slot].minScopeBegin != INVALID_ID
 					&& slotInfos[slot].minScopeBegin < id))
 				return add_to_scope(slot, slotScope, id);
 			begin_scope(slot, id);
 			slotScope = slotInfos[slot].activeSlotScope;
 			(*slotInfos[slot].activeSlotScope)->scopeBegin = id;
 			slotInfos[slot].activeSlotScope = nullptr;
-			slotInfos[slot].minScopeBegin = ID_EMPTY;
+			slotInfos[slot].minScopeBegin = INVALID_ID;
 		}
 
 		void extend_scope(const uint8_t& slot, const uint32_t& id) {
 			if (!slotInfos[slot].isParameter
 				&& slotInfos[slot].activeSlotScope
-				&& (slotInfos[slot].minScopeBegin == ID_EMPTY
+				&& (slotInfos[slot].minScopeBegin == INVALID_ID
 					|| slotInfos[slot].minScopeBegin > id))
 				slotInfos[slot].minScopeBegin = id;
 		}
@@ -619,7 +618,7 @@ struct Ast::Function {
 			for (uint8_t i = slotInfos.size(); i--;) {
 				if (slotInfos[i].isParameter || !slotInfos[i].activeSlotScope) continue;
 
-				for (uint32_t j = slotInfos[i].slotScopes.size() - 1; j-- && (*slotInfos[i].slotScopes[j])->scopeBegin <= id;) {
+				for (uint32_t j = slotInfos[i].slotScopes.size() - 1; j-- && (*slotInfos[i].slotScopes[j])->scopeBegin < id;) {
 					(*slotInfos[i].activeSlotScope)->scopeEnd = (*slotInfos[i].slotScopes[j])->scopeEnd;
 					(*slotInfos[i].activeSlotScope)->usages += (*slotInfos[i].slotScopes[j])->usages + 1;
 					*slotInfos[i].slotScopes[j] = *slotInfos[i].activeSlotScope;
@@ -650,7 +649,7 @@ struct Ast::Function {
 		std::vector<UpvalueScope> upvalueScopes;
 		std::vector<SlotInfo> slotInfos;
 		std::vector<SlotScope*> slotScopes;
-		uint32_t previousId = ID_EMPTY;
-		uint32_t previousLabel = ID_EMPTY;
+		uint32_t previousId = INVALID_ID;
+		uint32_t previousLabel = INVALID_ID;
 	} slotScopeCollector;
 };

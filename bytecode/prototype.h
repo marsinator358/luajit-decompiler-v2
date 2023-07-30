@@ -3,7 +3,7 @@ public:
 
 	Prototype(const Bytecode& bytecode);
 
-	void read(std::vector<Prototype*>& unlinkedPrototypes);
+	void operator()(std::vector<Prototype*>& unlinkedPrototypes);
 
 	struct {
 		uint8_t flags = 0;

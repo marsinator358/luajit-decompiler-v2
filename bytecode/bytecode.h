@@ -15,7 +15,7 @@ public:
 	Bytecode(const std::string& filePath);
 	~Bytecode();
 
-	void read();
+	void operator()();
 
 	const std::string filePath;
 
@@ -26,6 +26,7 @@ public:
 	} header;
 
 	const Prototype* main = nullptr;
+	uint32_t prototypeCount = 0;
 
 private:
 
@@ -41,6 +42,7 @@ private:
 	bool buffer_next_block();
 
 	HANDLE file = INVALID_HANDLE_VALUE;
+	uint64_t fileSize = 0;
 	uint64_t bytesUnread = 0;
 	std::vector<uint8_t> fileBuffer;
 	std::vector<Prototype*> prototypes;
