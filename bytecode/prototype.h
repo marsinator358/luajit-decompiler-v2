@@ -21,6 +21,7 @@ public:
 	std::vector<uint32_t> lineMap;
 	std::vector<std::string> upvalueNames;
 	std::vector<VariableInfo> variableInfos;
+	uint32_t prototypeSize = 0;
 
 private:
 

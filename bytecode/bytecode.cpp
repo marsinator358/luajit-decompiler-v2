@@ -13,8 +13,11 @@ Bytecode::~Bytecode() {
 void Bytecode::operator()() {
 	open_file();
 	read_header();
+	prototypesTotalSize = bytesUnread - 1;
 	read_prototypes();
 	close_file();
+	fileBuffer.clear();
+	fileBuffer.shrink_to_fit();
 }
 
 void Bytecode::read_header() {
@@ -41,15 +44,15 @@ void Bytecode::read_prototypes() {
 	while (buffer_next_block()) {
 		assert(fileBuffer.size() >= MIN_PROTO_SIZE, "Prototype is too short", filePath, DEBUG_INFO);
 		prototypes.emplace_back(new Prototype(*this));
+		prototypes.back()->prototypeSize = fileBuffer.size();
 		(*prototypes.back())(unlinkedPrototypes);
-		print_loading_bar(fileSize - bytesUnread, fileSize);
+		print_loading_bar(prototypesTotalSize - bytesUnread - 1, prototypesTotalSize);
 	}
 
 	erase_loading_bar();
 	assert(unlinkedPrototypes.size() == 1, "Failed to link main prototype", filePath, DEBUG_INFO);
 	main = unlinkedPrototypes.back();
 	prototypes.shrink_to_fit();
-	prototypeCount = prototypes.size();
 }
 
 void Bytecode::open_file() {
@@ -63,13 +66,9 @@ void Bytecode::open_file() {
 }
 
 void Bytecode::close_file() {
-	if (file != INVALID_HANDLE_VALUE) {
-		CloseHandle(file);
-		file = INVALID_HANDLE_VALUE;
-	}
-
-	fileBuffer.clear();
-	fileBuffer.shrink_to_fit();
+	if (file == INVALID_HANDLE_VALUE) return;
+	CloseHandle(file);
+	file = INVALID_HANDLE_VALUE;
 }
 
 void Bytecode::read_file(const uint32_t& byteCount) {

@@ -15,18 +15,18 @@ int main(const int argc, const char* const argv[]) {
 
 	while (true) {
 		Bytecode bytecode(argv[1]);
-		print("Input file: " + bytecode.filePath);
 		Ast ast(bytecode);
-		//Lua lua(ast, argv[2]);
+		Lua lua(ast, std::string(argv[1]) + ".lua");
 
 		try {
+			print("Input file: " + bytecode.filePath);
 			print("Reading bytecode...");
 			bytecode();
-			print("Done! Building ast...");
+			print("Building ast...");
 			ast();
-			//print("Done! Writing lua source...");
+			print("Writing lua source...");
 			//lua();
-			//print("Output file: " + lua.filePath);
+			print("Output file: " + lua.filePath);
 		} catch (const int& button) {
 			erase_loading_bar();
 

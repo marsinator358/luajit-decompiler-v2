@@ -26,11 +26,11 @@ public:
 	} header;
 
 	const Prototype* main = nullptr;
-	uint32_t prototypeCount = 0;
+	uint64_t prototypesTotalSize = 0;
 
 private:
 
-	static constexpr uint8_t MIN_PROTO_SIZE = 7;
+	static constexpr uint8_t MIN_PROTO_SIZE = 11;
 	static constexpr uint8_t MIN_FILE_SIZE = MIN_PROTO_SIZE + 7;
 
 	void read_header();

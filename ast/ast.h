@@ -34,7 +34,7 @@ public:
 
 private:
 	
-	Function*& new_function(const Bytecode::Prototype& prototype);
+	Function*& new_function(const Bytecode::Prototype& prototype, const uint32_t& level = 0);
 	Statement*& new_statement(const AST_STATEMENT& type);
 	Expression*& new_expression(const AST_EXPRESSION& type);
 	void build_functions(Function& function);
@@ -59,7 +59,7 @@ private:
 	static uint32_t get_block_index_from_id(const std::vector<Statement*>& block, const uint32_t& id);
 	static uint32_t get_extended_id_from_statement(Statement* const& statement);
 	static void check_valid_name(Constant* const& constant);
-	void check_special_number(Expression* const& expression, const bool& convertInfinity);
+	void check_special_number(Expression* const& expression, const bool& isCdata = false);
 	static ConstantType get_constant_type(Expression* const& expression);
 
 	const Bytecode& bytecode;
@@ -67,5 +67,5 @@ private:
 	std::vector<Statement*> statements;
 	std::vector<Function*> functions;
 	std::vector<Expression*> expressions;
-	uint32_t functionsComplete = 0;
+	uint64_t prototypeDataLeft = 0;
 };

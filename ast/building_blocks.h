@@ -26,6 +26,9 @@ struct Ast::Expression {
 		case AST_EXPRESSION_CONSTANT:
 			constant = new Constant;
 			break;
+		case AST_EXPRESSION_VARARG:
+			returnCount = 0;
+			break;
 		case AST_EXPRESSION_VARIABLE:
 			variable = new Variable;
 			break;
@@ -86,6 +89,7 @@ struct Ast::Expression {
 		Table* table;
 		BinaryOperation* binaryOperation;
 		UnaryOperation* unaryOperation;
+		uint8_t returnCount;
 	};
 };
 
@@ -137,6 +141,7 @@ struct Ast::FunctionCall {
 	std::vector<Expression*> arguments;
 	Expression* multresArgument = nullptr;
 	bool isMethod = false;
+	uint8_t returnCount = 0;
 };
 
 struct Ast::Table {
@@ -204,7 +209,12 @@ enum AST_STATEMENT {
 	AST_STATEMENT_BREAK,
 	AST_STATEMENT_DECLARATION,
 	AST_STATEMENT_ASSIGNMENT,
-	AST_STATEMENT_FUNCTION_CALL
+	AST_STATEMENT_FUNCTION_CALL,
+	AST_STATEMENT_IF,
+	AST_STATEMENT_ELSE,
+	AST_STATEMENT_ELSEIF,
+	AST_STATEMENT_WHILE,
+	AST_STATEMENT_REPEAT
 };
 
 struct Ast::Statement {
@@ -243,10 +253,11 @@ struct Ast::Statement {
 			openSlots.emplace_back(&expression);
 		}
 
-		void register_open_slots(Expression*& expression, Expression*& expressions...) {
+		template <typename... Expressions>
+		void register_open_slots(Expression*& expression, Expressions*&... expressions) {
 			usedSlots.emplace_back(expression->variable->slot);
 			openSlots.emplace_back(&expression);
-			return register_open_slots(expressions);
+			return register_open_slots(expressions...);
 		}
 
 		bool isPotentialMethod = false;
@@ -265,6 +276,7 @@ struct Ast::Local {
 	uint8_t baseSlot = 0;
 	uint32_t scopeBegin = INVALID_ID;
 	uint32_t scopeEnd = INVALID_ID;
+	bool excludeBlock = false;
 };
 
 struct Ast::SlotScope {
@@ -287,7 +299,17 @@ struct Ast::Function {
 		std::vector<uint32_t> jumpIds;
 	};
 
-	Function(const Bytecode::Prototype& prototype) : prototype(prototype) {}
+	Function(const Bytecode::Prototype& prototype, const uint32_t& level) : prototype(prototype),
+		level(level), isVariadic(prototype.header.flags & Bytecode::BC_PROTO_VARARG), hasDebugInfo(prototype.header.hasDebugInfo) {
+		slotScopeCollector.slotInfos.resize(prototype.header.framesize);
+
+		for (uint8_t i = prototype.header.parameters; i--;) {
+			slotScopeCollector.slotInfos[i].isParameter = true;
+			slotScopeCollector.slotInfos[i].activeSlotScope = slotScopeCollector.new_slot_scope();
+		}
+
+		slotScopeCollector.previousId = prototype.instructions.size();
+	}
 
 	~Function() {
 		for (uint32_t i = slotScopeCollector.slotScopes.size(); i--;) {
@@ -401,9 +423,8 @@ struct Ast::Function {
 	}
 
 	const Bytecode::Prototype& prototype;
-	uint32_t level = 0;
-	bool isVariadic = false;
-	bool hasDebugInfo = false;
+	const uint32_t level;
+	const bool isVariadic, hasDebugInfo;
 	bool assignmentSlotIsUpvalue = false;
 	std::vector<Local> locals;
 	std::vector<Upvalue> upvalues;
@@ -443,15 +464,6 @@ struct Ast::Function {
 		SlotScope** new_slot_scope() {
 			slotScopes.emplace_back(new SlotScope);
 			return &slotScopes.back()->slotScope;
-		}
-
-		void set_slot_infos(const uint8_t& framesize, const uint8_t& parameters) {
-			slotInfos.resize(framesize);
-
-			for (uint8_t i = parameters; i--;) {
-				slotInfos[i].isParameter = true;
-				slotInfos[i].activeSlotScope = new_slot_scope();
-			}
 		}
 
 		uint32_t add_upvalue_info(const uint32_t& id, const UpvalueInfo::TYPE& type) {

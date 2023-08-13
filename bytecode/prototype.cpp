@@ -22,6 +22,7 @@ void Bytecode::Prototype::read_header() {
 	constants.resize(get_uleb128());
 	numberConstants.resize(get_uleb128());
 	instructions.resize(get_uleb128());
+	assert(instructions.size(), "Prototype has no instructions", bytecode.filePath, DEBUG_INFO);
 	if (bytecode.header.flags & BC_F_STRIP || !get_uleb128()) return;
 	header.hasDebugInfo = true;
 	header.firstLine = get_uleb128();
@@ -165,7 +166,7 @@ void Bytecode::Prototype::read_debug_info() {
 		upvalueNames[i] = get_string();
 	}
 
-	uint32_t scopeOffset = 0;
+	uint32_t scopeOffset = 0, parameterCount = 0;
 
 	for (uint8_t byte = get_next_byte(); byte; byte = get_next_byte()) {
 		variableInfos.emplace_back();
@@ -183,6 +184,7 @@ void Bytecode::Prototype::read_debug_info() {
 
 		if (!scopeOffset) {
 			variableInfos.back().isParameter = true;
+			parameterCount++;
 			variableInfos.back().scopeEnd = get_uleb128() - 2;
 		} else {
 			variableInfos.back().scopeBegin = scopeOffset - 2;
@@ -190,6 +192,7 @@ void Bytecode::Prototype::read_debug_info() {
 		}
 	}
 
+	assert(parameterCount == header.parameters, "Prototype parameter count does not\nmatch with debug info", bytecode.filePath, DEBUG_INFO);
 	variableInfos.shrink_to_fit();
 }
 
