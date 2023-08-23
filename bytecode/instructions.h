@@ -98,7 +98,7 @@ enum BC_OP {
 	BC_OP_JFUNCV, // unsupported
 	BC_OP_FUNCC, // unsupported
 	BC_OP_FUNCCW, // unsupported
-	BC_OP_MAX
+	BC_OP_INVALID
 };
 
 struct Bytecode::Instruction {

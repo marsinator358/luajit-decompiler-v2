@@ -2,10 +2,11 @@
 
 static const HANDLE CONSOLE_OUTPUT = GetStdHandle(STD_OUTPUT_HANDLE);
 static const HANDLE CONSOLE_INPUT = GetStdHandle(STD_INPUT_HANDLE);
-static bool isLoadingBarActive = false;
+static bool isProgressBarActive = false;
 
 int main(const int argc, const char* const argv[]) {
 	print(PROGRAM_NAME);
+	print(std::to_string(argc));
 
 	if (argc < 2 || argv[1] == "") {
 		print("No file path specified! Press enter to exit.");
@@ -13,10 +14,51 @@ int main(const int argc, const char* const argv[]) {
 		return EXIT_FAILURE;
 	}
 
+	/*
+	WIN32_FIND_DATAA fileData;
+	HANDLE file = INVALID_HANDLE_VALUE;
+	std::vector<std::string> folders(1, "./");
+	std::string folder;
+	print("--------------------");
+
+	while (folders.size()) {
+		folder = folders.back();
+		print("[" + folder + "]");
+		folders.back() += '*';
+		file = FindFirstFileA(folders.back().c_str(), &fileData);
+		folders.pop_back();
+
+		if (file != INVALID_HANDLE_VALUE) {
+			do {
+				if (fileData.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) {
+					folders.emplace_back(fileData.cFileName);
+
+					if (folders.back() == "." || folders.back() == "..") {
+						folders.pop_back();
+					} else {
+						folders.back() = folder + folders.back() + '\\';
+					}
+				} else {
+					print(fileData.cFileName);
+				}
+			} while (FindNextFileA(file, &fileData));
+
+			FindClose(file);
+		}
+	}
+
+	print("--------------------");
+	*/
+
+	std::string outputFile = argv[1];
+	PathRemoveExtensionA(outputFile.data());
+	outputFile = outputFile.data();
+	outputFile += ".lua";
+
 	while (true) {
 		Bytecode bytecode(argv[1]);
 		Ast ast(bytecode);
-		Lua lua(ast, std::string(argv[1]) + ".lua");
+		Lua lua(ast, outputFile);
 
 		try {
 			print("Input file: " + bytecode.filePath);
@@ -28,11 +70,11 @@ int main(const int argc, const char* const argv[]) {
 			//lua();
 			print("Output file: " + lua.filePath);
 		} catch (const int& button) {
-			erase_loading_bar();
+			erase_progress_bar();
 
 			switch (button) {
 			case IDCANCEL:
-				print("Failed! Press enter to exit.");
+				print("Aborted! Press enter to exit.");
 				input();
 				return EXIT_FAILURE;
 			case IDTRYAGAIN:
@@ -63,23 +105,23 @@ std::string input() {
 	return ReadConsoleA(CONSOLE_INPUT, BUFFER, 1024, &charsRead, NULL) && charsRead > 2 ? std::string(BUFFER, charsRead - 2) : "";
 }
 
-void print_loading_bar(const double& progress, const double& total) {
-	static char LOADING_BAR[] = "\r[====================]";
+void print_progress_bar(const double& progress, const double& total) {
+	static char PROGRESS_BAR[] = "\r[====================]";
 
 	const uint8_t threshold = std::round(20 / total * progress);
 
 	for (uint8_t i = 20; i--;) {
-		LOADING_BAR[i + 2] = i < threshold ? '=' : ' ';
+		PROGRESS_BAR[i + 2] = i < threshold ? '=' : ' ';
 	}
 
-	WriteConsoleA(CONSOLE_OUTPUT, LOADING_BAR, 23, NULL, NULL);
-	isLoadingBarActive = true;
+	WriteConsoleA(CONSOLE_OUTPUT, PROGRESS_BAR, 23, NULL, NULL);
+	isProgressBarActive = true;
 }
 
-void erase_loading_bar() {
-	if (!isLoadingBarActive) return;
+void erase_progress_bar() {
+	if (!isProgressBarActive) return;
 	WriteConsoleA(CONSOLE_OUTPUT, "\r                      \r", 24, NULL, NULL);
-	isLoadingBarActive = false;
+	isProgressBarActive = false;
 }
 
 void assert(const bool& assertion, const std::string& message, const std::string& filePath, const std::string& function, const std::string& source, const uint32_t& line) {

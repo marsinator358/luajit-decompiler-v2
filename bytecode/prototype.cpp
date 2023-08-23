@@ -32,7 +32,7 @@ void Bytecode::Prototype::read_header() {
 void Bytecode::Prototype::read_instructions() {
 	for (uint32_t i = 0; i < instructions.size(); i++) {
 		instructions[i].type = get_op_type(get_next_byte(), bytecode.header.version);
-		assert(instructions[i].type < BC_OP_MAX, "Prototype has invalid instruction (" + byte_to_string(instructions[i].type) + ")", bytecode.filePath, DEBUG_INFO);
+		assert(instructions[i].type < BC_OP_INVALID, "Prototype has invalid instruction (" + byte_to_string(instructions[i].type) + ")", bytecode.filePath, DEBUG_INFO);
 
 		switch (instructions[i].type) {
 		case BC_OP_ISTYPE:

@@ -10,6 +10,9 @@ public:
 
 private:
 
+	static constexpr char NEW_LINE[] = "\r\n";
+	static constexpr char TAB[] = "\t";
+
 	void create_file();
 	void close_file();
 	void write_file();
@@ -17,4 +20,5 @@ private:
 	const Ast& ast;
 	HANDLE file = INVALID_HANDLE_VALUE;
 	std::string writeBuffer;
+	uint64_t prototypeDataLeft = 0;
 };

@@ -3,7 +3,7 @@ private:
 
 	static constexpr uint32_t INVALID_ID = -1;
 
-	enum ConstantType {
+	enum CONSTANT_TYPE {
 		INVALID_CONSTANT,
 		NIL_CONSTANT,
 		BOOL_CONSTANT,
@@ -21,7 +21,10 @@ private:
 	struct Local;
 	struct SlotScope;
 	struct Function;
+	struct ConditionBuilder;
 	#include "building_blocks.h"
+	#include "function.h"
+	#include "conditionBuilder.h";
 
 public:
 
@@ -50,7 +53,7 @@ private:
 	Expression* new_slot(const uint8_t& slot);
 	Expression* new_literal(const uint8_t& literal);
 	Expression* new_signed_literal(const uint16_t& signedLiteral);
-	Expression* new_primitive(const uint16_t& primitive);
+	Expression* new_primitive(const uint8_t& primitive);
 	Expression* new_number(const Function& function, const uint16_t& index);
 	Expression* new_string(const Function& function, const uint16_t& index);
 	Expression* new_table(const Function& function, const uint16_t& index);
@@ -60,7 +63,7 @@ private:
 	static uint32_t get_extended_id_from_statement(Statement* const& statement);
 	static void check_valid_name(Constant* const& constant);
 	void check_special_number(Expression* const& expression, const bool& isCdata = false);
-	static ConstantType get_constant_type(Expression* const& expression);
+	static CONSTANT_TYPE get_constant_type(Expression* const& expression);
 
 	const Bytecode& bytecode;
 	bool isFR2Enabled = false;
