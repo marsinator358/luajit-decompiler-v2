@@ -6,7 +6,6 @@ static bool isProgressBarActive = false;
 
 int main(const int argc, const char* const argv[]) {
 	print(PROGRAM_NAME);
-	print(std::to_string(argc));
 
 	if (argc < 2 || argv[1] == "") {
 		print("No file path specified! Press enter to exit.");
@@ -53,7 +52,7 @@ int main(const int argc, const char* const argv[]) {
 	std::string outputFile = argv[1];
 	PathRemoveExtensionA(outputFile.data());
 	outputFile = outputFile.data();
-	outputFile += ".lua";
+	outputFile += "_decompiled.lua";
 
 	while (true) {
 		Bytecode bytecode(argv[1]);

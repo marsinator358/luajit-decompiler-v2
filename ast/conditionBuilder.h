@@ -20,16 +20,16 @@ struct Ast::ConditionBuilder {
 			FALSY_TEST,
 			UNCONDITIONAL,
 			AND,
-			NOT_AND,
 			OR,
 			NOT_OR,
+			NOT_AND,
 			END_TARGET,
 			TRUE_TARGET,
 			FALSE_TARGET,
 		} type;
 
-		uint32_t nodeId = INVALID_ID;
-		uint32_t targetId = INVALID_ID;
+		uint32_t nodeLabel = INVALID_ID;
+		uint32_t targetLabel = INVALID_ID;
 		Node* targetNode = nullptr;
 		uint32_t incomingNodes = 0;
 		bool inverted = false;
@@ -38,19 +38,19 @@ struct Ast::ConditionBuilder {
 		Node* rightNode = nullptr;
 	};
 
-	ConditionBuilder(Ast& ast, const TYPE& type, const uint32_t& endTargetId, const uint32_t& trueTargetId, const uint32_t& falseTargetId) : ast(ast), type(type) {
+	ConditionBuilder(const TYPE& type, Ast& ast, const uint32_t& endTargetLabel, const uint32_t& trueTargetLabel, const uint32_t& falseTargetLabel) : ast(ast), type(type) {
 		if (type == ASSIGNMENT) {
 			endTarget = new_node();
 			endTarget->type = Node::END_TARGET;
-			endTarget->nodeId = endTargetId;
+			endTarget->nodeLabel = endTargetLabel;
 		}
 
 		trueTarget = new_node();
 		trueTarget->type = Node::TRUE_TARGET;
-		trueTarget->nodeId = trueTargetId;
+		trueTarget->nodeLabel = trueTargetLabel;
 		falseTarget = new_node();
 		falseTarget->type = Node::FALSE_TARGET;
-		falseTarget->nodeId = falseTargetId;
+		falseTarget->nodeLabel = falseTargetLabel;
 	}
 
 	~ConditionBuilder() {
@@ -64,7 +64,7 @@ struct Ast::ConditionBuilder {
 		return nodes.back();
 	}
 
-	Node::TYPE get_node_type(const Bytecode::BC_OP& instruction, const bool& swapped = false) {
+	Node::TYPE get_node_type(const Bytecode::BC_OP& instruction, const bool& swapped) {
 		switch (instruction) {
 		case Bytecode::BC_OP_ISLT:
 			return swapped ? Node::GREATER_THEN : Node::LESS_THAN;
@@ -95,11 +95,11 @@ struct Ast::ConditionBuilder {
 		}
 	}
 
-	void add_node(const Node::TYPE& type, const uint32_t& nodeId, const uint32_t& targetId, std::vector<Expression*>* const& expressions = nullptr) {
+	void add_node(const Node::TYPE& type, const uint32_t& nodeLabel, const uint32_t& targetLabel, std::vector<Expression*>* const& expressions) {
 		conditionNodes.emplace_back(new_node());
 		conditionNodes.back()->type = type;
-		conditionNodes.back()->nodeId = nodeId;
-		conditionNodes.back()->targetId = targetId;
+		conditionNodes.back()->nodeLabel = nodeLabel;
+		conditionNodes.back()->targetLabel = targetLabel;
 		conditionNodes.back()->expressions = expressions;
 	}
 
@@ -117,8 +117,10 @@ struct Ast::ConditionBuilder {
 		}
 
 		for (uint32_t i = conditionNodes.size(); i--;) {
+			if (conditionNodes[i]->targetLabel == INVALID_ID) continue;
+
 			for (uint32_t j = conditionNodes.size(); j--;) {
-				if (conditionNodes[i]->targetId != conditionNodes[j]->nodeId) continue;
+				if (conditionNodes[i]->targetLabel != conditionNodes[j]->nodeLabel) continue;
 				conditionNodes[i]->targetNode = conditionNodes[j];
 				conditionNodes[j]->incomingNodes++;
 				break;
@@ -262,7 +264,7 @@ struct Ast::ConditionBuilder {
 		case Node::FALSY_TEST:
 			return node->inverted ? (*node->expressions).back() : build_not((*node->expressions).back());
 		case Node::UNCONDITIONAL:
-			return build_constant(node->inverted);
+			return ast.new_primitive(node->inverted ? 1 : 2);
 		case Node::AND:
 		case Node::OR:
 			return node->inverted ? build_not(build_binary(node->type, build_expression(node->leftNode), build_expression(node->rightNode)))
@@ -319,12 +321,6 @@ struct Ast::ConditionBuilder {
 
 		expression->binaryOperation->leftOperand = leftOperand;
 		expression->binaryOperation->rightOperand = rightOperand;
-		return expression;
-	}
-
-	Expression* build_constant(const bool& inverted) {
-		Expression* const expression = ast.new_expression(AST_EXPRESSION_CONSTANT);
-		expression->constant->type = inverted ? AST_CONSTANT_FALSE : AST_CONSTANT_TRUE;
 		return expression;
 	}
 

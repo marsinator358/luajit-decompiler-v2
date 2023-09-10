@@ -225,13 +225,9 @@ struct Ast::Statement {
 		uint8_t b = 0;
 		uint8_t c = 0;
 		uint16_t d = 0;
+		uint32_t id = INVALID_ID;
 		uint32_t target = INVALID_ID;
-
-		struct {
-			uint32_t id = INVALID_ID;
-			uint32_t lineOffset = 0;
-			uint32_t attachedLabel = INVALID_ID;
-		} info;
+		uint32_t attachedLabel = INVALID_ID;
 	} instruction;
 
 	Function* function = nullptr;
@@ -239,7 +235,6 @@ struct Ast::Statement {
 	Local* locals = nullptr;
 
 	struct {
-		uint32_t jumpId = INVALID_ID;
 		bool allowSlotSwap = false;
 		bool swapped = false;
 	} condition;
@@ -259,6 +254,7 @@ struct Ast::Statement {
 
 		bool isPotentialMethod = false;
 		bool isTableConstructor = false;
+		bool needsFordwardDeclaration = false;
 		CONSTANT_TYPE allowedConstantType = NUMBER_CONSTANT;
 		std::vector<Variable> variables;
 		std::vector<Expression*> expressions;

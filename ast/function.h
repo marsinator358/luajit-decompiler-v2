@@ -26,8 +26,7 @@ struct Ast::Function {
 		std::vector<uint32_t> jumpIds;
 	};
 
-	Function(const Bytecode::Prototype& prototype, const uint32_t& level) : prototype(prototype),
-		level(level), isVariadic(prototype.header.flags& Bytecode::BC_PROTO_VARARG), hasDebugInfo(prototype.header.hasDebugInfo) {
+	Function(const Bytecode::Prototype& prototype, const uint32_t& id) : prototype(prototype), isVariadic(prototype.header.flags& Bytecode::BC_PROTO_VARARG), hasDebugInfo(prototype.header.hasDebugInfo) {
 		slotScopeCollector.slotInfos.resize(prototype.header.framesize);
 
 		for (uint8_t i = prototype.header.parameters; i--;) {
@@ -123,18 +122,19 @@ struct Ast::Function {
 
 	bool is_valid_block_range(const uint32_t& blockBegin, const uint32_t& blockEnd) {
 		for (uint32_t i = labels.size(); i-- && labels[i].target >= blockBegin;) {
-			if (labels[i].jumpIds.size()
-				&& labels[i].target <= blockEnd
+			if (labels[i].target <= blockEnd
+				&& labels[i].jumpIds.size()
 				&& (labels[i].jumpIds.front() < blockBegin
-					|| labels[i].jumpIds.back() > blockEnd)) return false;
+					|| labels[i].jumpIds.back() > blockEnd))
+				return false;
 		}
 
 		return true;
 	}
 
 	const Bytecode::Prototype& prototype;
-	const uint32_t level;
 	const bool isVariadic, hasDebugInfo;
+	uint32_t id = 0;
 	bool assignmentSlotIsUpvalue = false;
 	std::vector<Local> locals;
 	std::vector<Upvalue> upvalues;
@@ -256,8 +256,7 @@ struct Ast::Function {
 						case UpvalueInfo::JUMP:
 							if (minScopeEnd < upvalueInfos[k].target) {
 								minScopeEnd = upvalueInfos[k].target;
-							}
-							else if (minScopeBegin >= upvalueInfos[k].target) {
+							} else if (minScopeBegin >= upvalueInfos[k].target) {
 								minScopeBegin = upvalueInfos[k].target - 1;
 
 								for (uint32_t l = index; l-- && minScopeBegin < upvalueInfos[l].id; index = l) {
@@ -267,8 +266,7 @@ struct Ast::Function {
 									case UpvalueInfo::JUMP:
 										if (minScopeEnd < upvalueInfos[l].target) {
 											minScopeEnd = upvalueInfos[l].target;
-										}
-										else if (minScopeBegin >= upvalueInfos[l].target) {
+										} else if (minScopeBegin >= upvalueInfos[l].target) {
 											minScopeBegin = upvalueInfos[l].target - 1;
 										}
 									}
@@ -372,6 +370,5 @@ struct Ast::Function {
 		std::vector<SlotInfo> slotInfos;
 		std::vector<SlotScope*> slotScopes;
 		uint32_t previousId = INVALID_ID;
-		uint32_t previousLabel = INVALID_ID;
 	} slotScopeCollector;
 };
