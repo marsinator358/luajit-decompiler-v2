@@ -10,6 +10,11 @@ private:
 		NUMBER_CONSTANT
 	};
 
+	struct Local;
+	struct SlotScope;
+	struct ConditionBuilder;
+
+public:
 	struct Expression;
 	struct Constant;
 	struct Variable;
@@ -18,15 +23,9 @@ private:
 	struct BinaryOperation;
 	struct UnaryOperation;
 	struct Statement;
-	struct Local;
-	struct SlotScope;
 	struct Function;
-	struct ConditionBuilder;
 	#include "building_blocks.h"
 	#include "function.h"
-	#include "conditionBuilder.h";
-
-public:
 
 	Ast(const Bytecode& bytecode);
 	~Ast();
@@ -36,6 +35,8 @@ public:
 	Function* chunk = nullptr;
 
 private:
+
+	#include "conditionBuilder.h";
 
 	struct BlockInfo {
 		uint32_t index = INVALID_ID;
@@ -57,6 +58,8 @@ private:
 	void eliminate_slots(Function& function, std::vector<Statement*>& block, BlockInfo* const& previousBlock = nullptr);
 	void eliminate_conditions(Function& function, std::vector<Statement*>& block, BlockInfo* const& previousBlock = nullptr);
 	void build_if_statements(Function& function, std::vector<Statement*>& block, BlockInfo* const& previousBlock = nullptr);
+	void clean_up(Function& function);
+	void clean_up_block(Function& function, std::vector<Statement*>& block, uint32_t& variableCounter, uint32_t& iteratorCounter);
 	Expression* new_slot(const uint8_t& slot);
 	Expression* new_literal(const uint8_t& literal);
 	Expression* new_signed_literal(const uint16_t& signedLiteral);
@@ -69,6 +72,7 @@ private:
 	static uint32_t get_block_index_from_id(const std::vector<Statement*>& block, const uint32_t& id);
 	static uint32_t get_extended_id_from_statement(Statement* const& statement);
 	static uint32_t get_label_from_next_statement(Function& function, const BlockInfo& blockInfo, const bool& returnExtendedLabel, const bool& excludeDeclaration);
+	static bool is_valid_block(Function& function, const BlockInfo& blockInfo, const uint32_t& blockBegin);
 	static void check_valid_name(Constant* const& constant);
 	void check_special_number(Expression* const& expression, const bool& isCdata = false);
 	static CONSTANT_TYPE get_constant_type(Expression* const& expression);

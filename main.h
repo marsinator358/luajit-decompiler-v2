@@ -10,6 +10,11 @@
 #define DEBUG_INFO __FUNCTION__, __FILE__, __LINE__
 
 constexpr char PROGRAM_NAME[] = "LuaJIT Decompiler v2";
+static constexpr uint64_t DOUBLE_SIGN = 0x8000000000000000;
+static constexpr uint64_t DOUBLE_EXPONENT = 0x7FF0000000000000;
+static constexpr uint64_t DOUBLE_FRACTION = 0x000FFFFFFFFFFFFF;
+static constexpr uint64_t DOUBLE_SPECIAL = DOUBLE_EXPONENT;
+static constexpr uint64_t DOUBLE_NEGATIVE_ZERO = DOUBLE_SIGN;
 
 void print(const std::string& message);
 std::string input();

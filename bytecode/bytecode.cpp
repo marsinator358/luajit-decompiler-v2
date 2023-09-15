@@ -11,6 +11,7 @@ Bytecode::~Bytecode() {
 }
 
 void Bytecode::operator()() {
+	print_progress_bar();
 	open_file();
 	read_header();
 	prototypesTotalSize = bytesUnread - 1;
@@ -18,6 +19,7 @@ void Bytecode::operator()() {
 	close_file();
 	fileBuffer.clear();
 	fileBuffer.shrink_to_fit();
+	erase_progress_bar();
 }
 
 void Bytecode::read_header() {
@@ -39,7 +41,6 @@ void Bytecode::read_header() {
 
 void Bytecode::read_prototypes() {
 	std::vector<Prototype*> unlinkedPrototypes;
-	print_progress_bar();
 
 	while (buffer_next_block()) {
 		assert(fileBuffer.size() >= MIN_PROTO_SIZE, "Prototype is too short", filePath, DEBUG_INFO);
@@ -49,7 +50,6 @@ void Bytecode::read_prototypes() {
 		print_progress_bar(prototypesTotalSize - bytesUnread - 1, prototypesTotalSize);
 	}
 
-	erase_progress_bar();
 	assert(unlinkedPrototypes.size() == 1, "Failed to link main prototype", filePath, DEBUG_INFO);
 	main = unlinkedPrototypes.back();
 	prototypes.shrink_to_fit();

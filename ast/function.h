@@ -8,7 +8,7 @@ struct Ast::Local {
 
 struct Ast::SlotScope {
 	SlotScope* slotScope = this;
-	std::string* name = nullptr;
+	std::string name;
 	uint32_t scopeBegin = INVALID_ID;
 	uint32_t scopeEnd = INVALID_ID;
 	uint32_t usages = 0;
@@ -22,6 +22,7 @@ struct Ast::Function {
 	};
 
 	struct Label {
+		std::string name;
 		uint32_t target = INVALID_ID;
 		std::vector<uint32_t> jumpIds;
 	};

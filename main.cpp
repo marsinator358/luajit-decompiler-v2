@@ -49,15 +49,27 @@ int main(const int argc, const char* const argv[]) {
 	print("--------------------");
 	*/
 
+#if defined _DEBUG
 	std::string outputFile = argv[1];
 	PathRemoveExtensionA(outputFile.data());
 	outputFile = outputFile.data();
 	outputFile += "_decompiled.lua";
+#else
+	std::string outputFile = argv[0];
+	GetCurrentDirectoryA(outputFile.size(), outputFile.data());
+	outputFile = outputFile.data();
+	outputFile += "\\output\\";
+	CreateDirectoryA(outputFile.c_str(), NULL);
+	outputFile += PathFindFileNameA(argv[1]);
+	PathRemoveExtensionA(outputFile.data());
+	outputFile = outputFile.data();
+	outputFile += ".lua";
+#endif
 
 	while (true) {
 		Bytecode bytecode(argv[1]);
 		Ast ast(bytecode);
-		Lua lua(ast, outputFile);
+		Lua lua(bytecode, ast, outputFile);
 
 		try {
 			print("Input file: " + bytecode.filePath);
@@ -66,7 +78,7 @@ int main(const int argc, const char* const argv[]) {
 			print("Building ast...");
 			ast();
 			print("Writing lua source...");
-			//lua();
+			lua();
 			print("Output file: " + lua.filePath);
 		} catch (const int& button) {
 			erase_progress_bar();

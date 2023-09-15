@@ -209,9 +209,10 @@ enum AST_STATEMENT {
 	AST_STATEMENT_FUNCTION_CALL,
 	AST_STATEMENT_IF,
 	AST_STATEMENT_ELSE,
-	AST_STATEMENT_ELSEIF,
 	AST_STATEMENT_WHILE,
-	AST_STATEMENT_REPEAT
+	AST_STATEMENT_REPEAT,
+	AST_STATEMENT_DO,
+	AST_STATEMENT_LABEL
 };
 
 struct Ast::Statement {
@@ -240,16 +241,16 @@ struct Ast::Statement {
 	} condition;
 
 	struct {
-		void register_open_slots(Expression*& expression) {
+		void register_slots(Expression*& expression) {
 			usedSlots.emplace_back(expression->variable->slot);
 			openSlots.emplace_back(&expression);
 		}
 
 		template <typename... Expressions>
-		void register_open_slots(Expression*& expression, Expressions*&... expressions) {
+		void register_slots(Expression*& expression, Expressions*&... expressions) {
 			usedSlots.emplace_back(expression->variable->slot);
 			openSlots.emplace_back(&expression);
-			return register_open_slots(expressions...);
+			return register_slots(expressions...);
 		}
 
 		bool isPotentialMethod = false;
