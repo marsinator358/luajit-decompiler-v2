@@ -36,31 +36,32 @@ void Ast::operator()() {
 	chunk = new_function(*bytecode.main);
 	if (bytecode.header.version == Bytecode::BC_VERSION_2) isFR2Enabled = bytecode.header.flags & Bytecode::BC_F_FR2;
 	prototypeDataLeft = bytecode.prototypesTotalSize;
-	build_functions(*chunk);
+	uint32_t functionCounter = 0;
+	build_functions(*chunk, functionCounter);
 	functions.shrink_to_fit();
 	statements.shrink_to_fit();
 	expressions.shrink_to_fit();
 	erase_progress_bar();
 }
 
-void Ast::build_functions(Function& function) {
+void Ast::build_functions(Function& function, uint32_t& functionCounter) {
+	function.id = functionCounter;
+	functionCounter++;
 	build_instructions(function);
 	function.usedGlobals.shrink_to_fit();
 	if (!function.hasDebugInfo) function.slotScopeCollector.build_upvalue_scopes();
-	collect_slot_scopes(function, function.block);
+	collect_slot_scopes(function, function.block, nullptr);
 	assert(function.slotScopeCollector.assert_scopes_closed(), "Failed to close slot scopes", bytecode.filePath, DEBUG_INFO);
-	eliminate_slots(function, function.block);
-	eliminate_conditions(function, function.block);
-	build_if_statements(function, function.block);
+	eliminate_slots(function, function.block, nullptr);
+	eliminate_conditions(function, function.block, nullptr);
+	build_if_statements(function, function.block, nullptr);
 	clean_up(function);
 	function.block.shrink_to_fit();
 	prototypeDataLeft -= function.prototype.prototypeSize;
 	print_progress_bar(bytecode.prototypesTotalSize - prototypeDataLeft, bytecode.prototypesTotalSize);
 
 	for (uint32_t i = function.childFunctions.size(); i--;) {
-		function.childFunctions[i]->id = nextFunctionId;
-		nextFunctionId++;
-		build_functions(*function.childFunctions[i]);
+		build_functions(*function.childFunctions[i], functionCounter);
 	}
 }
 
@@ -278,8 +279,10 @@ void Ast::group_jumps(Function& function) {
 			index = get_block_index_from_id(function.block, function.labels[function.block[i]->instruction.attachedLabel].jumpIds.back());
 
 			if (index != INVALID_ID
+				&& function.block[index]->type == AST_STATEMENT_GOTO
 				&& function.block[index]->instruction.type == Bytecode::BC_OP_UCLO) {
 				function.remove_jump(function.block[index]->instruction.id, function.block[index]->instruction.target);
+				function.block[index]->type = AST_STATEMENT_RETURN;
 				function.block[index]->instruction.type = function.block[i]->instruction.type;
 				function.block[index]->instruction.a = function.block[i]->instruction.a;
 				function.block[index]->instruction.b = function.block[i]->instruction.b;
@@ -316,8 +319,10 @@ void Ast::build_loops(Function& function) {
 			function.block[i]->type = AST_STATEMENT_GENERIC_FOR;
 			targetIndex = get_block_index_from_id(function.block, function.block[i]->instruction.target);
 			breakTarget = get_extended_id_from_statement(function.block[targetIndex + 2]);
+			function.block[targetIndex]->instruction.target = function.block[i]->instruction.attachedLabel;
 			function.block[i]->instruction = function.block[targetIndex]->instruction;
 			function.block[i]->instruction.id = function.block[targetIndex + 1]->instruction.target - 1;
+			function.block[i]->instruction.attachedLabel = function.block[i]->instruction.target;
 			function.block[i]->instruction.target = function.block[targetIndex + 1]->instruction.id + 1;
 			function.block[targetIndex]->type = AST_STATEMENT_EMPTY;
 			function.block[i]->block.reserve(targetIndex - i);
@@ -380,7 +385,6 @@ void Ast::build_loops(Function& function) {
 						function.block[i]->block.emplace_back(new_statement(AST_STATEMENT_GOTO));
 						function.block[i]->block.back()->instruction.type = Bytecode::BC_OP_JMP;
 						function.block[i]->block.back()->instruction.target = function.block[i]->instruction.id;
-						function.add_jump(function.block[i]->instruction.id, function.block[i]->instruction.id);
 					}
 
 					break;
@@ -574,6 +578,7 @@ void Ast::build_expressions(Function& function, std::vector<Statement*>& block) 
 				break;
 			case Bytecode::BC_OP_KSTR:
 				block[i]->assignment.expressions.back() = new_string(function, block[i]->instruction.d);
+				check_valid_name(block[i]->assignment.expressions.back()->constant);
 				break;
 			case Bytecode::BC_OP_KCDATA:
 				block[i]->assignment.expressions.back() = new_cdata(function, block[i]->instruction.d);
@@ -967,7 +972,7 @@ void Ast::collect_slot_scopes(Function& function, std::vector<Statement*>& block
 		case AST_STATEMENT_LOOP:
 			function.slotScopeCollector.extend_scopes(block[i]->instruction.id);
 			blockInfo.index = i;
-			collect_slot_scopes(function, block[i]->block, &blockInfo);
+			collect_slot_scopes(function, block[i]->block, block[i]->type == AST_STATEMENT_LOOP ? &blockInfo : nullptr);
 			function.slotScopeCollector.merge_scopes(block[i]->instruction.target);
 			break;
 		case AST_STATEMENT_DECLARATION:
@@ -1313,7 +1318,7 @@ void Ast::collect_slot_scopes(Function& function, std::vector<Statement*>& block
 											function.slotScopeCollector.slotInfos[targetSlot].activeSlotScope = targetSlotScope;
 										}
 
-										collect_slot_scopes(function, conditionBlocks[j]);
+										collect_slot_scopes(function, conditionBlocks[j], nullptr);
 										i -= conditionBlocks[j].size();
 										if (!function.slotScopeCollector.slotInfos[targetSlot].activeSlotScope || j == conditionBlocks.size() - 1) continue;
 
@@ -1569,6 +1574,9 @@ void Ast::eliminate_slots(Function& function, std::vector<Statement*>& block, Bl
 		switch (block[i]->type) {
 		case AST_STATEMENT_NUMERIC_FOR:
 		case AST_STATEMENT_GENERIC_FOR:
+			blockInfo.index = i;
+			eliminate_slots(function, block[i]->block, nullptr);
+			break;
 		case AST_STATEMENT_LOOP:
 		case AST_STATEMENT_DECLARATION:
 			blockInfo.index = i;
@@ -1617,8 +1625,9 @@ void Ast::eliminate_slots(Function& function, std::vector<Statement*>& block, Bl
 								|| block[index]->assignment.variables.back().type != AST_VARIABLE_SLOT
 								|| (*block[index]->assignment.variables.back().slotScope)->scopeBegin != block[index]->instruction.id
 								|| *block[index]->assignment.variables.back().slotScope != *block[i]->assignment.variables.back().slotScope
-								|| block[index]->assignment.expressions.back()->type != AST_EXPRESSION_CONSTANT
-								|| !get_constant_type(block[index]->assignment.expressions.back()))
+								|| (index != i - 4
+									&& (block[index]->assignment.expressions.back()->type != AST_EXPRESSION_CONSTANT
+										|| !get_constant_type(block[index]->assignment.expressions.back()))))
 								index = INVALID_ID;
 							break;
 						}
@@ -1945,11 +1954,13 @@ void Ast::eliminate_conditions(Function& function, std::vector<Statement*>& bloc
 						
 					break;
 				case AST_STATEMENT_ASSIGNMENT:
-					if (block[index + 1]->instruction.type == Bytecode::BC_OP_JMP
+					if ((block[index + 1]->type == AST_STATEMENT_GOTO
+							|| block[index + 1]->type == AST_STATEMENT_BREAK)
+						&& block[index + 1]->instruction.type == Bytecode::BC_OP_JMP
 						&& block[index]->assignment.variables.size() == 1
 						&& block[index]->assignment.variables.back().type == AST_VARIABLE_SLOT
 						&& block[index]->assignment.expressions.back()->type == AST_EXPRESSION_CONSTANT
-						&& !get_constant_type(block[index]->assignment.expressions.back()))
+						&& get_constant_type(block[index]->assignment.expressions.back()))
 						break;
 				default:
 					index = INVALID_ID;
@@ -2321,6 +2332,9 @@ void Ast::eliminate_conditions(Function& function, std::vector<Statement*>& bloc
 			continue;
 		case AST_STATEMENT_NUMERIC_FOR:
 		case AST_STATEMENT_GENERIC_FOR:
+			blockInfo.index = i;
+			eliminate_conditions(function, block[i]->block, nullptr);
+			continue;
 		case AST_STATEMENT_LOOP:
 		case AST_STATEMENT_DECLARATION:
 			blockInfo.index = i;
@@ -2356,6 +2370,9 @@ void Ast::build_if_statements(Function& function, std::vector<Statement*>& block
 			continue;
 		case AST_STATEMENT_NUMERIC_FOR:
 		case AST_STATEMENT_GENERIC_FOR:
+			blockInfo.index = i;
+			build_if_statements(function, block[i]->block, nullptr);
+			continue;
 		case AST_STATEMENT_LOOP:
 		case AST_STATEMENT_DECLARATION:
 			blockInfo.index = i;
@@ -2366,14 +2383,6 @@ void Ast::build_if_statements(Function& function, std::vector<Statement*>& block
 }
 
 void Ast::clean_up(Function& function) {
-	//TODO
-
-	for (uint32_t i = 0, labelCounter = 0; i < function.labels.size(); i++) {
-		if (!function.labels[i].jumpIds.size()) continue;
-		function.labels[i].name = "label_" + std::to_string(function.id) + "_" + std::to_string(labelCounter);
-		labelCounter++;
-	}
-
 	if (function.hasDebugInfo) {
 		for (uint32_t i = function.parameterNames.size(); i--;) {
 			(*function.slotScopeCollector.slotInfos[i].activeSlotScope)->name = function.parameterNames[i];
@@ -2388,10 +2397,119 @@ void Ast::clean_up(Function& function) {
 	}
 
 	uint32_t variableCounter = 0, iteratorCounter = 0;
-	clean_up_block(function, function.block, variableCounter, iteratorCounter);
+	clean_up_block(function, function.block, variableCounter, iteratorCounter, nullptr);
+
+	for (uint32_t i = 0, labelCounter = 0; i < function.labels.size(); i++) {
+		if (!function.labels[i].jumpIds.size()) continue;
+		function.labels[i].name = "label_" + std::to_string(function.id) + "_" + std::to_string(labelCounter);
+		labelCounter++;
+	}
 }
 
-void Ast::clean_up_block(Function& function, std::vector<Statement*>& block, uint32_t& variableCounter, uint32_t& iteratorCounter) {
+void Ast::clean_up_block(Function& function, std::vector<Statement*>& block, uint32_t& variableCounter, uint32_t& iteratorCounter, Statement** parent_if_statement) {
+	//TODO
+
+	for (uint32_t i = 0; i < block.size(); i++) {
+		switch (block[i]->type) {
+		case AST_STATEMENT_NUMERIC_FOR:
+		case AST_STATEMENT_GENERIC_FOR:
+			if (function.hasDebugInfo) {
+				for (uint8_t j = block[i]->assignment.variables.size(); j--;) {
+					(*block[i]->assignment.variables[j].slotScope)->name = block[i]->locals->names[j];
+				}
+			} else {
+				for (uint8_t j = 0; j < block[i]->assignment.variables.size(); j++) {
+					(*block[i]->assignment.variables[j].slotScope)->name = "iter_" + std::to_string(function.id) + "_" + std::to_string(iteratorCounter);
+					iteratorCounter++;
+				}
+			}
+
+			clean_up_block(function, block[i]->block, variableCounter, iteratorCounter, nullptr);
+			continue;
+		case AST_STATEMENT_LOOP:
+			for (std::vector<Statement*>* currentBlock = &block[i]->block; currentBlock->size(); currentBlock = &currentBlock->back()->block) {
+				if (currentBlock->back()->type == AST_STATEMENT_DECLARATION) continue;
+				if (currentBlock->back()->type != AST_STATEMENT_GOTO
+					|| currentBlock->back()->instruction.target != block[i]->instruction.id
+					|| function.is_valid_label(currentBlock->back()->instruction.attachedLabel)
+					|| currentBlock->size() < 2)
+					break;
+
+				switch ((*currentBlock)[currentBlock->size() - 2]->type) {
+				case AST_STATEMENT_BREAK:
+					if (currentBlock->back()->instruction.type != Bytecode::BC_OP_UCLO
+						|| currentBlock->back()->instruction.target != block[i]->instruction.id
+						|| (*currentBlock)[currentBlock->size() - 2]->instruction.type != Bytecode::BC_OP_UCLO)
+						break;
+					function.remove_jump(currentBlock->back()->instruction.id, currentBlock->back()->instruction.target);
+					block[i]->type = AST_STATEMENT_REPEAT;
+					block[i]->assignment.expressions.emplace_back(new_primitive(2));
+					(*currentBlock)[currentBlock->size() - 2]->type = AST_STATEMENT_EMPTY;
+					currentBlock->erase(currentBlock->begin() + currentBlock->size() - 1);
+					break;
+				case AST_STATEMENT_IF:
+					if ((*currentBlock)[currentBlock->size() - 2]->block.size() != 1 || (*currentBlock)[currentBlock->size() - 2]->block.back()->type != AST_STATEMENT_BREAK) break;
+					function.remove_jump(currentBlock->back()->instruction.id, currentBlock->back()->instruction.target);
+					block[i]->type = AST_STATEMENT_REPEAT;
+					block[i]->assignment.expressions.emplace_back((*currentBlock)[currentBlock->size() - 2]->assignment.expressions.back());
+					(*currentBlock)[currentBlock->size() - 2]->type = AST_STATEMENT_EMPTY;
+					currentBlock->erase(currentBlock->begin() + currentBlock->size() - 1);
+					break;
+				}
+
+				break;
+			}
+
+			if (block[i]->type == AST_STATEMENT_LOOP) {
+				if (block[i]->block.size() && block[i]->block.back()->type == AST_STATEMENT_GOTO) {
+					if (block[i]->block.back()->instruction.target == block[i]->instruction.id) {
+						function.remove_jump(block[i]->block.back()->instruction.id, block[i]->block.back()->instruction.target);
+						block[i]->type = AST_STATEMENT_WHILE;
+						block[i]->assignment.expressions.emplace_back(new_primitive(2));
+						block[i]->block.back()->type = AST_STATEMENT_EMPTY;
+					} else if (parent_if_statement
+						&& block.size() == 1
+						&& !function.is_valid_label(block[i]->instruction.attachedLabel)
+						&& function.is_valid_label((*parent_if_statement)->instruction.attachedLabel)
+						&& function.labels[(*parent_if_statement)->instruction.attachedLabel].target == block[i]->block.back()->instruction.target) {
+						function.remove_jump(block[i]->block.back()->instruction.id, block[i]->block.back()->instruction.target);
+						block[i]->type = AST_STATEMENT_WHILE;
+						block[i]->assignment.expressions.emplace_back((*parent_if_statement)->assignment.expressions.back());
+						block[i]->instruction.attachedLabel = (*parent_if_statement)->instruction.attachedLabel;
+						block[i]->block.back()->type = AST_STATEMENT_EMPTY;
+						*parent_if_statement = block[i];
+					}
+				}
+
+				if (block[i]->type == AST_STATEMENT_LOOP) {
+					block[i]->type = AST_STATEMENT_REPEAT;
+					block[i]->assignment.expressions.emplace_back(new_primitive(2));
+				}
+			}
+
+			clean_up_block(function, block[i]->block, variableCounter, iteratorCounter, nullptr);
+			continue;
+		case AST_STATEMENT_DECLARATION:
+			for (uint8_t j = block[i]->assignment.variables.size(); j--;) {
+				(*block[i]->assignment.variables[j].slotScope)->name = block[i]->locals->names[j];
+			}
+
+			clean_up_block(function, block[i]->block, variableCounter, iteratorCounter, nullptr);
+			continue;
+		case AST_STATEMENT_ASSIGNMENT:
+			for (uint32_t j = 0; j < block[i]->assignment.variables.size(); j++) {
+				if (block[i]->assignment.variables[j].type != AST_VARIABLE_SLOT || (*block[i]->assignment.variables[j].slotScope)->name.size()) continue;
+				(*block[i]->assignment.variables[j].slotScope)->name = "var_" + std::to_string(function.id) + "_" + std::to_string(variableCounter);
+				variableCounter++;
+			}
+
+			continue;
+		case AST_STATEMENT_IF:
+			clean_up_block(function, block[i]->block, variableCounter, iteratorCounter, i == block.size() - 1 || block[i + 1]->type != AST_STATEMENT_ELSE ? &block[i] : nullptr);
+			continue;
+		}
+	}
+
 	for (uint32_t i = 0; i < block.size(); i++) {
 		if (function.is_valid_label(block[i]->instruction.attachedLabel)) {
 			block.emplace(block.begin() + i, new_statement(AST_STATEMENT_LABEL));
@@ -2406,45 +2524,6 @@ void Ast::clean_up_block(Function& function, std::vector<Statement*>& block, uin
 			continue;
 		case AST_STATEMENT_GOTO:
 			block[i]->instruction.attachedLabel = function.get_label_from_id(block[i]->instruction.target);
-			continue;
-		case AST_STATEMENT_NUMERIC_FOR:
-		case AST_STATEMENT_GENERIC_FOR:
-			if (function.hasDebugInfo) {
-				for (uint8_t j = block[i]->assignment.variables.size(); j--;) {
-					(*block[i]->assignment.variables[j].slotScope)->name = block[i]->locals->names[j];
-				}
-			} else {
-				for (uint8_t j = 0; j < block[i]->assignment.variables.size(); j++) {
-					(*block[i]->assignment.variables[j].slotScope)->name = "iter_" + std::to_string(function.id) + "_" + std::to_string(iteratorCounter);
-					iteratorCounter++;
-				}
-			}
-
-			clean_up_block(function, block[i]->block, variableCounter, iteratorCounter);
-			continue;
-		case AST_STATEMENT_LOOP:
-			//TODO
-			block[i]->type = AST_STATEMENT_REPEAT;
-			block[i]->assignment.expressions.emplace_back(new_primitive(2));
-			clean_up_block(function, block[i]->block, variableCounter, iteratorCounter);
-			continue;
-		case AST_STATEMENT_DECLARATION:
-			for (uint8_t j = block[i]->assignment.variables.size(); j--;) {
-				(*block[i]->assignment.variables[j].slotScope)->name = block[i]->locals->names[j];
-			}
-
-			clean_up_block(function, block[i]->block, variableCounter, iteratorCounter);
-			continue;
-		case AST_STATEMENT_ASSIGNMENT:
-			for (uint32_t j = 0; j < block[i]->assignment.variables.size(); j++) {
-				if (block[i]->assignment.variables[j].type != AST_VARIABLE_SLOT || (*block[i]->assignment.variables[j].slotScope)->name.size()) continue;
-				(*block[i]->assignment.variables[j].slotScope)->name = "var_" + std::to_string(function.id) + "_" + std::to_string(variableCounter);
-				variableCounter++;
-			}
-
-			continue;
-		case AST_STATEMENT_IF:
-			clean_up_block(function, block[i]->block, variableCounter, iteratorCounter);
 			continue;
 		}
 	}

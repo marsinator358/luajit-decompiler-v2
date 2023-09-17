@@ -14,7 +14,7 @@ while also offering full support for gotos and stripped bytecode including upval
 
 **WARNING: The current release version is for debugging purposes only!**  
 The output lua code may contain lots of gotos and auto generated variables.  
-Loop conditions, else statements and multi assignments are currently not processed.
+Else statements and multi assignments are currently not processed.
 
 1. Head to the release section and download the latest exe.
 2. Drag and drop a valid LuaJIT bytecode file onto the exe.

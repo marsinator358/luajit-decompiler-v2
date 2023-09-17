@@ -51,6 +51,7 @@ void Lua::write_block(const Ast::Function& function, const std::vector<Ast::Stat
 				switch (block[i]->type) {
 				case Ast::AST_STATEMENT_NUMERIC_FOR:
 				case Ast::AST_STATEMENT_GENERIC_FOR:
+				case Ast::AST_STATEMENT_DECLARATION:
 				case Ast::AST_STATEMENT_IF:
 				case Ast::AST_STATEMENT_WHILE:
 				case Ast::AST_STATEMENT_REPEAT:
@@ -138,8 +139,8 @@ void Lua::write_block(const Ast::Function& function, const std::vector<Ast::Stat
 
 			if (isFunctionDefinition) {
 				if (!previousLineIsEmpty) {
-					write_indent();
 					write(NEW_LINE);
+					write_indent();
 				}
 
 				write("local function ", (*block[i]->assignment.variables.back().slotScope)->name);
@@ -184,8 +185,8 @@ void Lua::write_block(const Ast::Function& function, const std::vector<Ast::Stat
 
 			if (isFunctionDefinition) {
 				if (!previousLineIsEmpty) {
-					write_indent();
 					write(NEW_LINE);
+					write_indent();
 				}
 
 				write("function ");
@@ -679,7 +680,7 @@ void Lua::write_expression_list(const std::vector<Ast::Expression*>& expressions
 
 void Lua::write_function_definition(const Ast::Function& function, const bool& isMethod) {
 	write("(");
-	
+
 	for (uint8_t i = 0; i < function.parameterNames.size(); i++) {
 		if (!i && isMethod) continue;
 
@@ -705,7 +706,15 @@ void Lua::write_function_definition(const Ast::Function& function, const bool& i
 void Lua::write_number(const double& number) {
 	//TODO
 	const uint64_t rawDouble = std::bit_cast<uint64_t>(number);
-	write((rawDouble & DOUBLE_EXPONENT) == DOUBLE_SPECIAL ? (rawDouble & DOUBLE_SIGN ? "-1e309" : "1e309") : std::to_string(number));
+
+	if ((rawDouble & DOUBLE_EXPONENT) == DOUBLE_SPECIAL) {
+		write(rawDouble & DOUBLE_SIGN ? "-1e309" : "1e309");
+	} else {
+		std::string string;
+		string.resize(snprintf(nullptr, 0, "%1.17g", number));
+		snprintf(string.data(), string.size() + 1, "%1.17g", number);
+		write(string);
+	}
 }
 
 void Lua::write_string(const std::string& string, const bool& escapeChars) {
@@ -820,6 +829,7 @@ void Lua::write_indent() {
 }
 
 void Lua::create_file() {
+#if !defined _DEBUG
 	file = CreateFileA(filePath.c_str(), GENERIC_READ, NULL, NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
 
 	if (file != INVALID_HANDLE_VALUE) {
@@ -827,6 +837,7 @@ void Lua::create_file() {
 		assert(MessageBoxA(NULL, ("File " + filePath + " already exists.\n\nDo you want to overwrite it?").c_str(), PROGRAM_NAME, MB_ICONWARNING | MB_YESNO | MB_DEFBUTTON2) == IDYES,
 			"File already exists", filePath, DEBUG_INFO);
 	}
+#endif
 
 	file = CreateFileA(filePath.c_str(), GENERIC_WRITE, NULL, NULL, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL | FILE_FLAG_SEQUENTIAL_SCAN, NULL);
 	assert(file != INVALID_HANDLE_VALUE, "Unable to create file", filePath, DEBUG_INFO);
