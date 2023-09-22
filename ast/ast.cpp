@@ -2412,7 +2412,19 @@ void Ast::clean_up_block(Function& function, std::vector<Statement*>& block, uin
 	for (uint32_t i = 0; i < block.size(); i++) {
 		switch (block[i]->type) {
 		case AST_STATEMENT_NUMERIC_FOR:
+			if (block[i]->assignment.expressions.back()->type == AST_EXPRESSION_CONSTANT
+				&& block[i]->assignment.expressions.back()->constant->type == AST_CONSTANT_NUMBER
+				&& block[i]->assignment.expressions.back()->constant->number == 1)
+				block[i]->assignment.expressions.pop_back();
 		case AST_STATEMENT_GENERIC_FOR:
+			if (block[i]->type == AST_STATEMENT_GENERIC_FOR) {
+				while (block[i]->assignment.expressions.size() > 1
+					&& block[i]->assignment.expressions.back()->type == AST_EXPRESSION_CONSTANT
+					&& block[i]->assignment.expressions.back()->constant->type == AST_CONSTANT_NIL) {
+					block[i]->assignment.expressions.pop_back();
+				}
+			}
+
 			if (function.hasDebugInfo) {
 				for (uint8_t j = block[i]->assignment.variables.size(); j--;) {
 					(*block[i]->assignment.variables[j].slotScope)->name = block[i]->locals->names[j];
@@ -2490,6 +2502,12 @@ void Ast::clean_up_block(Function& function, std::vector<Statement*>& block, uin
 			clean_up_block(function, block[i]->block, variableCounter, iteratorCounter, nullptr);
 			continue;
 		case AST_STATEMENT_DECLARATION:
+			while (block[i]->assignment.expressions.size()
+				&& block[i]->assignment.expressions.back()->type == AST_EXPRESSION_CONSTANT
+				&& block[i]->assignment.expressions.back()->constant->type == AST_CONSTANT_NIL) {
+				block[i]->assignment.expressions.pop_back();
+			}
+
 			for (uint8_t j = block[i]->assignment.variables.size(); j--;) {
 				(*block[i]->assignment.variables[j].slotScope)->name = block[i]->locals->names[j];
 			}
@@ -2497,6 +2515,12 @@ void Ast::clean_up_block(Function& function, std::vector<Statement*>& block, uin
 			clean_up_block(function, block[i]->block, variableCounter, iteratorCounter, nullptr);
 			continue;
 		case AST_STATEMENT_ASSIGNMENT:
+			while (block[i]->assignment.expressions.size() > 1
+				&& block[i]->assignment.expressions.back()->type == AST_EXPRESSION_CONSTANT
+				&& block[i]->assignment.expressions.back()->constant->type == AST_CONSTANT_NIL) {
+				block[i]->assignment.expressions.pop_back();
+			}
+
 			for (uint32_t j = 0; j < block[i]->assignment.variables.size(); j++) {
 				if (block[i]->assignment.variables[j].type != AST_VARIABLE_SLOT || (*block[i]->assignment.variables[j].slotScope)->name.size()) continue;
 				(*block[i]->assignment.variables[j].slotScope)->name = "var_" + std::to_string(function.id) + "_" + std::to_string(variableCounter);

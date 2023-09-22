@@ -204,12 +204,12 @@ void Lua::write_block(const Ast::Function& function, const std::vector<Ast::Stat
 					continue;
 				}
 			} else {
-				write_assignment(block[i]->assignment.variables, block[i]->assignment.expressions, " = ", true);
+				write_assignment(block[i]->assignment.variables, block[i]->assignment.expressions, " = ", i);
 			}
 
 			break;
 		case Ast::AST_STATEMENT_FUNCTION_CALL:
-			write_function_call(*block[i]->assignment.expressions.back()->functionCall, true);
+			write_function_call(*block[i]->assignment.expressions.back()->functionCall, i);
 			break;
 		case Ast::AST_STATEMENT_IF:
 			write("if ");
@@ -297,8 +297,9 @@ void Lua::write_block(const Ast::Function& function, const std::vector<Ast::Stat
 }
 
 void Lua::write_expression(const Ast::Expression& expression, const bool& useParentheses) {
+	uint32_t nextListIndex, nextFieldIndex;
 	uint8_t precedence, operatorPrecedence;
-	bool parentheses;
+	bool parentheses, isFirstField, isFieldFound;
 	if (useParentheses) write("(");
 
 	switch (expression.type) {
@@ -347,7 +348,7 @@ void Lua::write_expression(const Ast::Expression& expression, const bool& usePar
 	case Ast::AST_EXPRESSION_FUNCTION_CALL:
 		write_function_call(*expression.functionCall, false);
 		break;
-	case Ast::AST_EXPRESSION_TABLE: //TODO
+	case Ast::AST_EXPRESSION_TABLE:
 		if (!expression.table->constants.list.size()
 			&& !expression.table->constants.fields.size()
 			&& !expression.table->fields.size()
@@ -359,38 +360,123 @@ void Lua::write_expression(const Ast::Expression& expression, const bool& usePar
 		write("{", NEW_LINE);
 		indentLevel++;
 		write_indent();
+		nextListIndex = 1;
+		nextFieldIndex = 0;
+		isFirstField = true;
 
-		if (expression.table->constants.list.size()) {
+		if (expression.table->constants.list.size()
+			&& (expression.table->constants.list.front()->type != Ast::AST_EXPRESSION_CONSTANT
+				|| expression.table->constants.list.front()->constant->type != Ast::AST_CONSTANT_NIL)) {
 			write("[0] = ");
 			write_expression(*expression.table->constants.list.front(), false);
+			isFirstField = false;
 		}
 
-		for (uint32_t i = 1; i < expression.table->constants.list.size(); i++) {
-			write(",", NEW_LINE);
-			write_indent();
+		while (!expression.table->multresField || nextListIndex < expression.table->multresIndex) {
+			if (nextListIndex < expression.table->constants.list.size()
+				&& (expression.table->constants.list[nextListIndex]->type != Ast::AST_EXPRESSION_CONSTANT
+					|| expression.table->constants.list[nextListIndex]->constant->type != Ast::AST_CONSTANT_NIL)) {
+				if (!isFirstField) {
+					write(",", NEW_LINE);
+					write_indent();
+				}
 
-			if (expression.table->multresField) {
-				if (i >= expression.table->multresIndex) {
-					write("[", std::to_string(i), "] = ");
-					write_expression(*expression.table->constants.list[i], false);
-					continue;
-				}
-			} else if (i == expression.table->constants.list.size() - 1
-				&& !expression.table->constants.fields.size()
-				&& !expression.table->fields.size()) {
-				switch (expression.table->constants.list[i]->type) {
-				case Ast::AST_EXPRESSION_VARARG:
-				case Ast::AST_EXPRESSION_FUNCTION_CALL:
-					write_expression(*expression.table->constants.list[i], true);
-					continue;
-				}
+				write_expression(*expression.table->constants.list[nextListIndex], false);
+				isFirstField = false;
+				nextListIndex++;
+				continue;
 			}
 
+			isFieldFound = false;
+
+			for (uint32_t i = nextFieldIndex; i < expression.table->fields.size(); i++) {
+				if (expression.table->fields[i].key->type != Ast::AST_EXPRESSION_CONSTANT
+					|| expression.table->fields[i].key->constant->type != Ast::AST_CONSTANT_NUMBER
+					|| expression.table->fields[i].key->constant->number != nextListIndex)
+					continue;
+				isFieldFound = true;
+
+				while (nextFieldIndex < i) {
+					if (!isFirstField) {
+						write(",", NEW_LINE);
+						write_indent();
+					}
+
+					if (expression.table->fields[nextFieldIndex].key->type == Ast::AST_EXPRESSION_CONSTANT && expression.table->fields[nextFieldIndex].key->constant->isName) {
+						write(expression.table->fields[nextFieldIndex].key->constant->string);
+					} else {
+						write("[");
+						write_expression(*expression.table->fields[nextFieldIndex].key, false);
+						write("]");
+					}
+
+					write(" = ");
+					write_expression(*expression.table->fields[nextFieldIndex].value, false);
+					isFirstField = false;
+					nextFieldIndex++;
+				}
+
+				break;
+			}
+
+			if (isFieldFound) {
+				if (!isFirstField) {
+					write(",", NEW_LINE);
+					write_indent();
+				}
+
+				if (!expression.table->multresField
+					&& nextFieldIndex == expression.table->fields.size() - 1
+					&& !expression.table->constants.fields.size()
+					&& (!expression.table->constants.list.size()
+						|| nextListIndex >= expression.table->constants.list.size() - 1)) {
+					switch (expression.table->fields.back().value->type) {
+					case Ast::AST_EXPRESSION_VARARG:
+					case Ast::AST_EXPRESSION_FUNCTION_CALL:
+						write_expression(*expression.table->fields.back().value, true);
+						break;
+					default:
+						write_expression(*expression.table->fields.back().value, false);
+						break;
+					}
+
+					nextListIndex++;
+					nextFieldIndex++;
+					break;
+				}
+
+				write_expression(*expression.table->fields[nextFieldIndex].value, false);
+				nextFieldIndex++;
+			} else if (!expression.table->multresField && nextListIndex >= expression.table->constants.list.size()) {
+				break;
+			} else {
+				if (!isFirstField) {
+					write(",", NEW_LINE);
+					write_indent();
+				}
+
+				write("nil");
+			}
+
+			isFirstField = false;
+			nextListIndex++;
+		}
+
+		for (uint32_t i = nextListIndex; i < expression.table->constants.list.size(); i++) {
+			if (expression.table->constants.list[i]->type == Ast::AST_EXPRESSION_CONSTANT && expression.table->constants.list[i]->constant->type == Ast::AST_CONSTANT_NIL) continue;
+
+			if (!isFirstField) {
+				write(",", NEW_LINE);
+				write_indent();
+			}
+
+			write("[", std::to_string(i), "] = ");
 			write_expression(*expression.table->constants.list[i], false);
+			isFirstField = false;
 		}
 
 		for (uint32_t i = 0; i < expression.table->constants.fields.size(); i++) {
-			if (i || expression.table->constants.list.size()) {
+			if (!isFirstField) {
 				write(",", NEW_LINE);
 				write_indent();
 			}
@@ -405,20 +491,18 @@ void Lua::write_expression(const Ast::Expression& expression, const bool& usePar
 
 			write(" = ");
 			write_expression(*expression.table->constants.fields[i].value, false);
+			isFirstField = false;
 		}
 
-		for (uint32_t i = 0; i < expression.table->fields.size(); i++) {
-			if (i
-				|| expression.table->constants.list.size()
-				|| expression.table->constants.fields.size()) {
+		for (uint32_t i = nextFieldIndex; i < expression.table->fields.size(); i++) {
+			if (!isFirstField) {
 				write(",", NEW_LINE);
 				write_indent();
 			}
 
 			if (expression.table->fields[i].key->type == Ast::AST_EXPRESSION_CONSTANT && expression.table->fields[i].key->constant->isName) {
 				write(expression.table->fields[i].key->constant->string);
-			}
-			else {
+			} else {
 				write("[");
 				write_expression(*expression.table->fields[i].key, false);
 				write("]");
@@ -426,18 +510,12 @@ void Lua::write_expression(const Ast::Expression& expression, const bool& usePar
 
 			write(" = ");
 			write_expression(*expression.table->fields[i].value, false);
+			isFirstField = false;
 		}
 
 		if (expression.table->multresField) {
-			if (expression.table->constants.list.size()
-				|| expression.table->constants.fields.size()
-				|| expression.table->fields.size()) {
+			if (!isFirstField) {
 				write(",", NEW_LINE);
-				write_indent();
-			}
-
-			for (uint32_t i = expression.table->constants.list.size() ? expression.table->constants.list.size() : 1; i < expression.table->multresIndex; i++) {
-				write("nil,", NEW_LINE);
 				write_indent();
 			}
 

@@ -6,11 +6,20 @@ static bool isProgressBarActive = false;
 
 int main(const int argc, const char* const argv[]) {
 	print(PROGRAM_NAME);
+	print(std::string("Compiled on ") + __DATE__);
+	std::string inputFile = argc > 1 ? argv[1] : "";
 
-	if (argc < 2 || argv[1] == "") {
-		print("No file path specified! Press enter to exit.");
-		input();
-		return EXIT_FAILURE;
+	if (!inputFile.size()) {
+		print("No file path specified!\nPlease drag and drop a valid LuaJIT bytecode file\nonto this program window and press enter to continue\nor press enter to exit.");
+		inputFile = input();
+		if (!inputFile.size()) return EXIT_FAILURE;
+	}
+
+	if (inputFile.size() >= 2
+		&& inputFile.front() == '"'
+		&& inputFile.back() == '"') {
+		inputFile.erase(inputFile.begin());
+		inputFile.pop_back();
 	}
 
 	/*
@@ -50,7 +59,7 @@ int main(const int argc, const char* const argv[]) {
 	*/
 
 #if defined _DEBUG
-	std::string outputFile = argv[1];
+	std::string outputFile = inputFile;
 	PathRemoveExtensionA(outputFile.data());
 	outputFile = outputFile.data();
 	outputFile += "_decompiled.lua";
@@ -60,14 +69,14 @@ int main(const int argc, const char* const argv[]) {
 	outputFile = outputFile.data();
 	outputFile += "\\output\\";
 	CreateDirectoryA(outputFile.c_str(), NULL);
-	outputFile += PathFindFileNameA(argv[1]);
+	outputFile += PathFindFileNameA(inputFile.c_str());
 	PathRemoveExtensionA(outputFile.data());
 	outputFile = outputFile.data();
 	outputFile += ".lua";
 #endif
 
 	while (true) {
-		Bytecode bytecode(argv[1]);
+		Bytecode bytecode(inputFile);
 		Ast ast(bytecode);
 		Lua lua(bytecode, ast, outputFile);
 
@@ -100,8 +109,10 @@ int main(const int argc, const char* const argv[]) {
 		break;
 	}
 
+#if !defined _DEBUG
 	print("Done! Press enter to exit.");
 	input();
+#endif
 	return EXIT_SUCCESS;
 }
 

@@ -1,25 +1,35 @@
 **WORK IN PROGRESS**
 
-### LuaJIT Decompiler v2
-
-------------
+## LuaJIT Decompiler v2
 
 The goal of this project is to replace the old and now mostly defunct python decompiler  
-with a modern version which fixes all of the bugs and quirks the python decompiler had  
+with a new and completely rewritten version which fixes all of the bugs and quirks the python decompiler had  
 while also offering full support for gotos and stripped bytecode including upvalues.
 
-### Usage
+## Usage
 
-------------
-
-**WARNING: The current release version is for debugging purposes only!**  
-The output lua code may contain lots of gotos and auto generated variables.  
+**WARNING: The current version is incomplete and may not work!**  
+The decompiled lua code may also contain lots of gotos and auto generated global variables.  
 Else statements and multi assignments are currently not processed.
 
-1. Head to the release section and download the latest exe.
+1. Head to the release section and download the latest executable.
 2. Drag and drop a valid LuaJIT bytecode file onto the exe.
-3. If the program succeeds, then a `.lua` file containing the output lua code  
+3. If the program succeeds, then a `.lua` file containing the decompiled lua code  
 will be placed in the `output` folder located in the same directory as the exe.
+
+## TODO
+
+Missing features from python decompiler:
+* else/elseif statements
+* recursive processing of files in a directory
+
+Other missing features:
+* multi assignments
+* improved number formatting
+* auto generated locals and do blocks for stripped bytecode
+* bytecode big endian support
+* decompilation logic for conditional assignment edge cases
+* multi threading for faster recursive file processing
 
 ------------
 
