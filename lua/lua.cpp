@@ -31,11 +31,38 @@ void Lua::write_block(const Ast::Function& function, const std::vector<Ast::Stat
 	bool isFunctionDefinition;
 	bool previousLineIsEmpty = true;
 
+#if defined _DEBUG
+	if (!block.size()) {
+		write_indent();
+		write("-- block empty", NEW_LINE);
+		return;
+	}
+#endif
+
 	for (uint32_t i = 0; i < block.size(); i++) {
-		if (!previousLineIsEmpty) {
+		if (i) {
+			previousLineIsEmpty = false;
+
 			switch (block[i - 1]->type) {
+			case Ast::AST_STATEMENT_RETURN:
+				if (block[i]->type != Ast::AST_STATEMENT_RETURN) previousLineIsEmpty = true;
+				break;
+			case Ast::AST_STATEMENT_GOTO:
+			case Ast::AST_STATEMENT_BREAK:
+				if (block[i]->type != Ast::AST_STATEMENT_GOTO && block[i]->type != Ast::AST_STATEMENT_BREAK) previousLineIsEmpty = true;
+				break;
 			case Ast::AST_STATEMENT_DECLARATION:
-				if (block[i]->type == Ast::AST_STATEMENT_DECLARATION) break;
+				if (block[i]->type != Ast::AST_STATEMENT_DECLARATION) previousLineIsEmpty = true;
+				break;
+			case Ast::AST_STATEMENT_ASSIGNMENT:
+				if (block[i]->type != Ast::AST_STATEMENT_ASSIGNMENT) previousLineIsEmpty = true;
+				break;
+			case Ast::AST_STATEMENT_FUNCTION_CALL:
+				if (block[i]->type != Ast::AST_STATEMENT_FUNCTION_CALL) previousLineIsEmpty = true;
+				break;
+			case Ast::AST_STATEMENT_LABEL:
+				if (block[i]->type != Ast::AST_STATEMENT_LABEL) previousLineIsEmpty = true;
+				break;
 			case Ast::AST_STATEMENT_NUMERIC_FOR:
 			case Ast::AST_STATEMENT_GENERIC_FOR:
 			case Ast::AST_STATEMENT_IF:
@@ -43,25 +70,13 @@ void Lua::write_block(const Ast::Function& function, const std::vector<Ast::Stat
 			case Ast::AST_STATEMENT_WHILE:
 			case Ast::AST_STATEMENT_REPEAT:
 			case Ast::AST_STATEMENT_DO:
-				write_indent();
-				write(NEW_LINE);
 				previousLineIsEmpty = true;
 				break;
-			default:
-				switch (block[i]->type) {
-				case Ast::AST_STATEMENT_NUMERIC_FOR:
-				case Ast::AST_STATEMENT_GENERIC_FOR:
-				case Ast::AST_STATEMENT_DECLARATION:
-				case Ast::AST_STATEMENT_IF:
-				case Ast::AST_STATEMENT_WHILE:
-				case Ast::AST_STATEMENT_REPEAT:
-				case Ast::AST_STATEMENT_DO:
-					write_indent();
-					write(NEW_LINE);
-					previousLineIsEmpty = true;
-				}
+			}
 
-				break;
+			if (previousLineIsEmpty) {
+				write_indent();
+				write(NEW_LINE);
 			}
 		}
 
@@ -226,9 +241,9 @@ void Lua::write_block(const Ast::Function& function, const std::vector<Ast::Stat
 
 				while (true) {
 					if (elseBlock->size() == 1 && elseBlock->front()->type == Ast::AST_STATEMENT_IF) {
-						write("else if ");
+						write("elseif ");
 						write_expression(*elseBlock->front()->assignment.expressions.back(), false);
-						write("then", NEW_LINE);
+						write(" then", NEW_LINE);
 						indentLevel++;
 						write_block(function, elseBlock->front()->block);
 						indentLevel--;
@@ -238,7 +253,7 @@ void Lua::write_block(const Ast::Function& function, const std::vector<Ast::Stat
 						&& elseBlock->back()->type == Ast::AST_STATEMENT_ELSE) {
 						write("elseif ");
 						write_expression(*elseBlock->front()->assignment.expressions.back(), false);
-						write("then", NEW_LINE);
+						write(" then", NEW_LINE);
 						indentLevel++;
 						write_block(function, elseBlock->front()->block);
 						indentLevel--;
@@ -248,7 +263,7 @@ void Lua::write_block(const Ast::Function& function, const std::vector<Ast::Stat
 					} else {
 						write("else", NEW_LINE);
 						indentLevel++;
-						write_block(function, elseBlock->front()->block);
+						write_block(function, *elseBlock);
 						indentLevel--;
 						write_indent();
 					}
@@ -292,7 +307,6 @@ void Lua::write_block(const Ast::Function& function, const std::vector<Ast::Stat
 		}
 
 		write(NEW_LINE);
-		previousLineIsEmpty = false;
 	}
 }
 
@@ -773,6 +787,10 @@ void Lua::write_function_definition(const Ast::Function& function, const bool& i
 	if (function.isVariadic) write("...");
 	write(")", NEW_LINE);
 	indentLevel++;
+#if defined _DEBUG
+	write_indent();
+	write("-- function ", std::to_string(function.id), NEW_LINE);
+#endif
 	write_block(function, function.block);
 	indentLevel--;
 	write_indent();

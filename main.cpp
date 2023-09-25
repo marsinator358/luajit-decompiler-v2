@@ -65,7 +65,7 @@ int main(const int argc, const char* const argv[]) {
 	outputFile += "_decompiled.lua";
 #else
 	std::string outputFile = argv[0];
-	GetCurrentDirectoryA(outputFile.size(), outputFile.data());
+	PathRemoveFileSpecA(outputFile.data());
 	outputFile = outputFile.data();
 	outputFile += "\\output\\";
 	CreateDirectoryA(outputFile.c_str(), NULL);

@@ -903,7 +903,10 @@ void Ast::build_expressions(Function& function, std::vector<Statement*>& block) 
 			block[i]->assignment.variables.resize(1);
 			block[i]->assignment.variables.back().type = AST_VARIABLE_SLOT;
 			block[i]->assignment.variables.back().slot = block[i]->instruction.a + 3;
-			assert(!function.hasDebugInfo || block[i]->locals && block[i]->assignment.variables.back().slot == block[i]->locals->baseSlot && block[i]->locals->names.size() == 1,
+			assert(!function.hasDebugInfo
+				|| (block[i]->locals
+					&& block[i]->assignment.variables.back().slot == block[i]->locals->baseSlot
+					&& block[i]->locals->names.size() == 1),
 				"Numeric for loop variable does not match with debug info", bytecode.filePath, DEBUG_INFO);
 			block[i]->assignment.expressions.resize(3, nullptr);
 			block[i]->assignment.expressions[0] = new_slot(block[i]->instruction.a);
@@ -919,7 +922,10 @@ void Ast::build_expressions(Function& function, std::vector<Statement*>& block) 
 				block[i]->assignment.variables[j].slot = block[i]->instruction.a + j;
 			}
 
-			assert(!function.hasDebugInfo || block[i]->locals && block[i]->assignment.variables.front().slot == block[i]->locals->baseSlot && block[i]->locals->names.size() == block[i]->assignment.variables.size(),
+			assert(!function.hasDebugInfo
+				|| (block[i]->locals
+					&& block[i]->assignment.variables.front().slot == block[i]->locals->baseSlot
+					&& block[i]->locals->names.size() == block[i]->assignment.variables.size()),
 				"Generic for loop variables do not match with debug info", bytecode.filePath, DEBUG_INFO);
 			block[i]->assignment.expressions.resize(3, nullptr);
 			block[i]->assignment.expressions[0] = new_slot(block[i]->instruction.a - 3);
@@ -1574,7 +1580,6 @@ void Ast::eliminate_slots(Function& function, std::vector<Statement*>& block, Bl
 		switch (block[i]->type) {
 		case AST_STATEMENT_NUMERIC_FOR:
 		case AST_STATEMENT_GENERIC_FOR:
-			blockInfo.index = i;
 			eliminate_slots(function, block[i]->block, nullptr);
 			break;
 		case AST_STATEMENT_LOOP:
@@ -2332,7 +2337,6 @@ void Ast::eliminate_conditions(Function& function, std::vector<Statement*>& bloc
 			continue;
 		case AST_STATEMENT_NUMERIC_FOR:
 		case AST_STATEMENT_GENERIC_FOR:
-			blockInfo.index = i;
 			eliminate_conditions(function, block[i]->block, nullptr);
 			continue;
 		case AST_STATEMENT_LOOP:
@@ -2345,32 +2349,103 @@ void Ast::eliminate_conditions(Function& function, std::vector<Statement*>& bloc
 }
 
 void Ast::build_if_statements(Function& function, std::vector<Statement*>& block, BlockInfo* const& previousBlock) {
+	//TODO
+
+	static void (* const build_if_false_statements)(Ast& ast, Function& function, std::vector<Statement*>& block, BlockInfo* const& previousBlock) =
+		[](Ast& ast, Function& function, std::vector<Statement*>& block, BlockInfo* const& previousBlock)->void {
+		BlockInfo blockInfo = { .block = block, .previousBlock = previousBlock };
+		uint32_t index, targetLabel;
+
+		for (uint32_t i = block.size(); i--;) {
+			if (block[i]->type != AST_STATEMENT_GOTO || block[i]->instruction.type == Bytecode::BC_OP_LOOP) continue;
+			targetLabel = INVALID_ID;
+
+			for (index = i; index < block.size(); index++) {
+				blockInfo.index = index;
+				targetLabel = get_label_from_next_statement(function, blockInfo, true, false);
+				if (targetLabel == INVALID_ID) continue;
+				if (function.labels[targetLabel].target == block[i]->instruction.target) break;
+				targetLabel = INVALID_ID;
+			}
+
+			if (targetLabel == INVALID_ID || !is_valid_block(function, blockInfo, block[i]->instruction.id + 1)) continue;
+			block[i]->type = AST_STATEMENT_IF;
+			block[i]->assignment.expressions.emplace_back(ast.new_primitive(1));
+			block[i]->block.reserve(index - i);
+			block[i]->block.insert(block[i]->block.begin(), block.begin() + i + 1, block.begin() + index + 1);
+			block.erase(block.begin() + i + 1, block.begin() + index + 1);
+			function.remove_jump(block[i]->instruction.id, block[i]->instruction.target);
+		}
+	};
+
+	static void (* const build_else_statements)(Ast& ast, Function& function, std::vector<Statement*>& block, BlockInfo* const& previousBlock) =
+		[](Ast& ast, Function& function, std::vector<Statement*>& block, BlockInfo* const& previousBlock)->void {
+		BlockInfo blockInfo = { .block = block, .previousBlock = previousBlock };
+		uint32_t index, targetLabel;
+
+		for (uint32_t i = block.size(); i--;) {
+			if (block[i]->type != AST_STATEMENT_IF) continue;
+
+			if (block[i]->block.size()
+				&& block[i]->block.back()->type == AST_STATEMENT_GOTO
+				&& block[i]->block.back()->instruction.type != Bytecode::BC_OP_LOOP) {
+				targetLabel = INVALID_ID;
+
+				for (index = i; index < block.size(); index++) {
+					blockInfo.index = index;
+					targetLabel = get_label_from_next_statement(function, blockInfo, true, false);
+					if (targetLabel == INVALID_ID) continue;
+					if (function.labels[targetLabel].target == block[i]->block.back()->instruction.target) break;
+					targetLabel = INVALID_ID;
+				}
+
+				if (targetLabel != INVALID_ID && is_valid_block(function, blockInfo, block[i]->block.back()->instruction.id + 1)) {
+					block.emplace(block.begin() + i + 1, ast.new_statement(AST_STATEMENT_ELSE));
+					block[i + 1]->block.reserve(index - i);
+					block[i + 1]->block.insert(block[i + 1]->block.begin(), block.begin() + i + 2, block.begin() + index + 2);
+					block.erase(block.begin() + i + 2, block.begin() + index + 2);
+					function.remove_jump(block[i]->block.back()->instruction.id, block[i]->block.back()->instruction.target);
+					block[i]->block.back()->type = AST_STATEMENT_EMPTY;
+					blockInfo.index = i + 1;
+					build_if_false_statements(ast, function, block[i + 1]->block, &blockInfo);
+					build_if_false_statements(ast, function, block[i]->block, nullptr);
+					continue;
+				}
+			}
+
+			blockInfo.index = i;
+			build_if_false_statements(ast, function, block[i]->block, &blockInfo);
+		}
+	};
+
 	BlockInfo blockInfo = { .block = block, .previousBlock = previousBlock };
 	uint32_t index, targetLabel;
 
 	for (uint32_t i = block.size(); i--;) {
 		switch (block[i]->type) {
 		case AST_STATEMENT_CONDITION:
-			//TODO
 			block[i]->type = AST_STATEMENT_IF;
 			targetLabel = INVALID_ID;
 
 			for (index = i; index < block.size(); index++) {
 				blockInfo.index = index;
 				targetLabel = get_label_from_next_statement(function, blockInfo, true, false);
-				if (targetLabel != INVALID_ID && function.labels[targetLabel].target == block[i]->instruction.target && is_valid_block(function, blockInfo, block[i]->instruction.id + 2)) break;
+				if (targetLabel != INVALID_ID
+					&& function.labels[targetLabel].target == block[i]->instruction.target
+					&& is_valid_block(function, blockInfo, block[i]->instruction.id + 2))
+					break;
 			}
 
 			assert(targetLabel != INVALID_ID && function.labels[targetLabel].target == block[i]->instruction.target, "Failed to build if statement", bytecode.filePath, DEBUG_INFO);
 			block[i]->block.reserve(index - i);
 			block[i]->block.insert(block[i]->block.begin(), block.begin() + i + 1, block.begin() + index + 1);
 			block.erase(block.begin() + i + 1, block.begin() + index + 1);
-		case AST_STATEMENT_BREAK:
 			function.remove_jump(block[i]->instruction.id, block[i]->instruction.target);
+			blockInfo.index = i;
+			build_else_statements(*this, function, block[i]->block, &blockInfo);
 			continue;
 		case AST_STATEMENT_NUMERIC_FOR:
 		case AST_STATEMENT_GENERIC_FOR:
-			blockInfo.index = i;
 			build_if_statements(function, block[i]->block, nullptr);
 			continue;
 		case AST_STATEMENT_LOOP:
@@ -2380,6 +2455,9 @@ void Ast::build_if_statements(Function& function, std::vector<Statement*>& block
 			continue;
 		}
 	}
+
+	build_else_statements(*this, function, block, previousBlock);
+	build_if_false_statements(*this, function, block, previousBlock);
 }
 
 void Ast::clean_up(Function& function) {
@@ -2449,11 +2527,8 @@ void Ast::clean_up_block(Function& function, std::vector<Statement*>& block, uin
 
 				switch ((*currentBlock)[currentBlock->size() - 2]->type) {
 				case AST_STATEMENT_BREAK:
-					if (currentBlock->back()->instruction.type != Bytecode::BC_OP_UCLO
-						|| currentBlock->back()->instruction.target != block[i]->instruction.id
-						|| (*currentBlock)[currentBlock->size() - 2]->instruction.type != Bytecode::BC_OP_UCLO)
-						break;
 					function.remove_jump(currentBlock->back()->instruction.id, currentBlock->back()->instruction.target);
+					function.remove_jump((*currentBlock)[currentBlock->size() - 2]->instruction.id, (*currentBlock)[currentBlock->size() - 2]->instruction.target);
 					block[i]->type = AST_STATEMENT_REPEAT;
 					block[i]->assignment.expressions.emplace_back(new_primitive(2));
 					(*currentBlock)[currentBlock->size() - 2]->type = AST_STATEMENT_EMPTY;
@@ -2462,6 +2537,7 @@ void Ast::clean_up_block(Function& function, std::vector<Statement*>& block, uin
 				case AST_STATEMENT_IF:
 					if ((*currentBlock)[currentBlock->size() - 2]->block.size() != 1 || (*currentBlock)[currentBlock->size() - 2]->block.back()->type != AST_STATEMENT_BREAK) break;
 					function.remove_jump(currentBlock->back()->instruction.id, currentBlock->back()->instruction.target);
+					function.remove_jump((*currentBlock)[currentBlock->size() - 2]->block.back()->instruction.id, (*currentBlock)[currentBlock->size() - 2]->block.back()->instruction.target);
 					block[i]->type = AST_STATEMENT_REPEAT;
 					block[i]->assignment.expressions.emplace_back((*currentBlock)[currentBlock->size() - 2]->assignment.expressions.back());
 					(*currentBlock)[currentBlock->size() - 2]->type = AST_STATEMENT_EMPTY;
@@ -2501,6 +2577,9 @@ void Ast::clean_up_block(Function& function, std::vector<Statement*>& block, uin
 
 			clean_up_block(function, block[i]->block, variableCounter, iteratorCounter, nullptr);
 			continue;
+		case AST_STATEMENT_BREAK:
+			function.remove_jump(block[i]->instruction.id, block[i]->instruction.target);
+			continue;
 		case AST_STATEMENT_DECLARATION:
 			while (block[i]->assignment.expressions.size()
 				&& block[i]->assignment.expressions.back()->type == AST_EXPRESSION_CONSTANT
@@ -2512,6 +2591,7 @@ void Ast::clean_up_block(Function& function, std::vector<Statement*>& block, uin
 				(*block[i]->assignment.variables[j].slotScope)->name = block[i]->locals->names[j];
 			}
 
+		case AST_STATEMENT_ELSE:
 			clean_up_block(function, block[i]->block, variableCounter, iteratorCounter, nullptr);
 			continue;
 		case AST_STATEMENT_ASSIGNMENT:

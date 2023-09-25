@@ -1,5 +1,3 @@
-**WORK IN PROGRESS**
-
 ## LuaJIT Decompiler v2
 
 The goal of this project is to replace the old and now mostly defunct python decompiler  
@@ -9,8 +7,6 @@ while also offering full support for gotos and stripped bytecode including upval
 ## Usage
 
 **WARNING: The current version is incomplete and may not work!**  
-The decompiled lua code may also contain lots of gotos and auto generated global variables.  
-Else statements and multi assignments are currently not processed.
 
 1. Head to the release section and download the latest executable.
 2. Drag and drop a valid LuaJIT bytecode file onto the exe.
@@ -20,7 +16,6 @@ will be placed in the `output` folder located in the same directory as the exe.
 ## TODO
 
 Missing features from python decompiler:
-* else/elseif statements
 * recursive processing of files in a directory
 
 Other missing features:
@@ -28,7 +23,7 @@ Other missing features:
 * improved number formatting
 * auto generated locals and do blocks for stripped bytecode
 * bytecode big endian support
-* decompilation logic for conditional assignment edge cases
+* improved decompilation logic for conditional assignments and if statements
 * multi threading for faster recursive file processing
 
 ------------
