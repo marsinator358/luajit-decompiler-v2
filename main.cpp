@@ -4,81 +4,45 @@ static const HANDLE CONSOLE_OUTPUT = GetStdHandle(STD_OUTPUT_HANDLE);
 static const HANDLE CONSOLE_INPUT = GetStdHandle(STD_INPUT_HANDLE);
 static bool isProgressBarActive = false;
 
-int main(const int argc, const char* const argv[]) {
-	print(PROGRAM_NAME);
-	print(std::string("Compiled on ") + __DATE__);
-	std::string inputFile = argc > 1 ? argv[1] : "";
+struct Directory {
+	const std::string path;
+	std::vector<Directory> folders;
+	std::vector<std::string> files;
+};
 
-	if (!inputFile.size()) {
-		print("No file path specified!\nPlease drag and drop a valid LuaJIT bytecode file\nonto this program window and press enter to continue\nor press enter to exit.");
-		inputFile = input();
-		if (!inputFile.size()) return EXIT_FAILURE;
-	}
+static void findFilesRecursively(const std::string& inputPath, Directory& directory) {
+	WIN32_FIND_DATAA pathData;
+	HANDLE handle = FindFirstFileA((inputPath + directory.path + '*').c_str(), &pathData);
+	if (handle == INVALID_HANDLE_VALUE) return;
 
-	if (inputFile.size() >= 2
-		&& inputFile.front() == '"'
-		&& inputFile.back() == '"') {
-		inputFile.erase(inputFile.begin());
-		inputFile.pop_back();
-	}
-
-	/*
-	WIN32_FIND_DATAA fileData;
-	HANDLE file = INVALID_HANDLE_VALUE;
-	std::vector<std::string> folders(1, "./");
-	std::string folder;
-	print("--------------------");
-
-	while (folders.size()) {
-		folder = folders.back();
-		print("[" + folder + "]");
-		folders.back() += '*';
-		file = FindFirstFileA(folders.back().c_str(), &fileData);
-		folders.pop_back();
-
-		if (file != INVALID_HANDLE_VALUE) {
-			do {
-				if (fileData.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) {
-					folders.emplace_back(fileData.cFileName);
-
-					if (folders.back() == "." || folders.back() == "..") {
-						folders.pop_back();
-					} else {
-						folders.back() = folder + folders.back() + '\\';
-					}
-				} else {
-					print(fileData.cFileName);
-				}
-			} while (FindNextFileA(file, &fileData));
-
-			FindClose(file);
+	do {
+		if (pathData.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) {
+			if (!strcmp(pathData.cFileName, ".") || !strcmp(pathData.cFileName, "..")) continue;
+			directory.folders.emplace_back(Directory{ .path = directory.path + pathData.cFileName + "\\" });
+			findFilesRecursively(inputPath, directory.folders.back());
+			if (!directory.folders.back().files.size() && !directory.folders.back().folders.size()) directory.folders.pop_back();
+			continue;
 		}
-	}
 
-	print("--------------------");
-	*/
+		directory.files.emplace_back(pathData.cFileName);
+	} while (FindNextFileA(handle, &pathData));
 
-#if defined _DEBUG
-	std::string outputFile = inputFile;
-	PathRemoveExtensionA(outputFile.data());
-	outputFile = outputFile.data();
-	outputFile += "_decompiled.lua";
-#else
-	std::string outputFile = argv[0];
-	PathRemoveFileSpecA(outputFile.data());
-	outputFile = outputFile.data();
-	outputFile += "\\output\\";
-	CreateDirectoryA(outputFile.c_str(), NULL);
-	outputFile += PathFindFileNameA(inputFile.c_str());
-	PathRemoveExtensionA(outputFile.data());
-	outputFile = outputFile.data();
-	outputFile += ".lua";
-#endif
+	FindClose(handle);
+}
 
-	while (true) {
-		Bytecode bytecode(inputFile);
+static bool decompileFilesRecursively(const std::string& inputPath, const std::string& outputPath, const Directory& directory) {
+	CreateDirectoryA((outputPath + directory.path).c_str(), NULL);
+	std::string outputFile;
+
+	for (uint32_t i = 0; i < directory.files.size(); i++) {
+		outputFile = directory.files[i];
+		PathRemoveExtensionA(outputFile.data());
+		outputFile = outputFile.data();
+		outputFile += ".lua";
+
+		Bytecode bytecode(inputPath + directory.path + directory.files[i]);
 		Ast ast(bytecode);
-		Lua lua(bytecode, ast, outputFile);
+		Lua lua(bytecode, ast, outputPath + directory.path + outputFile);
 
 		try {
 			print("Input file: " + bytecode.filePath);
@@ -94,19 +58,77 @@ int main(const int argc, const char* const argv[]) {
 
 			switch (button) {
 			case IDCANCEL:
-				print("Aborted! Press enter to exit.");
-				input();
-				return EXIT_FAILURE;
+				return false;
 			case IDTRYAGAIN:
 				print("Retrying...");
+				i--;
 				continue;
 			case IDCONTINUE:
 				print("File skipped.");
-				break;
+				continue;
 			}
 		}
+	}
 
-		break;
+	for (uint32_t i = 0; i < directory.folders.size(); i++) {
+		if (!decompileFilesRecursively(inputPath, outputPath, directory.folders[i])) return false;
+	}
+
+	return true;
+}
+
+int main(const int argc, const char* const argv[]) {
+	print(std::string(PROGRAM_NAME) + "\nCompiled on " + __DATE__);
+	std::string inputPath = argc > 1 ? argv[1] : "";
+
+	if (!inputPath.size()) {
+		print("No file path specified!\nPlease drag and drop a valid LuaJIT bytecode file or a folder containing such files\nonto this program window and press enter to continue or press enter to exit.");
+		inputPath = input();
+		if (!inputPath.size()) return EXIT_FAILURE;
+	}
+
+	if (inputPath.size() >= 2
+		&& inputPath.front() == '"'
+		&& inputPath.back() == '"') {
+		inputPath.erase(inputPath.begin());
+		inputPath.pop_back();
+	}
+
+	const DWORD pathAttributes = GetFileAttributesA(inputPath.c_str());
+
+	if (pathAttributes == INVALID_FILE_ATTRIBUTES) {
+		print("Failed to retrieve attributes for path: " + inputPath + "\nPress enter to exit.");
+		input();
+		return EXIT_FAILURE;
+	}
+
+	Directory root;
+
+	if (pathAttributes & FILE_ATTRIBUTE_DIRECTORY) {
+		inputPath += '\\';
+		findFilesRecursively(inputPath, root);
+
+		if (!root.files.size() && !root.folders.size()) {
+			print("No files found in path: " + inputPath + "\nPress enter to exit.");
+			input();
+			return EXIT_FAILURE;
+		}
+	} else {
+		root.files.emplace_back(PathFindFileNameA(inputPath.c_str()));
+		PathRemoveFileSpecA(inputPath.data());
+		inputPath = inputPath.data();
+		inputPath += '\\';
+	}
+
+	std::string outputPath = argv[0];
+	PathRemoveFileSpecA(outputPath.data());
+	outputPath = outputPath.data();
+	outputPath += "\\output\\";
+
+	if (!decompileFilesRecursively(inputPath, outputPath, root)) {
+		print("Aborted! Press enter to exit.");
+		input();
+		return EXIT_FAILURE;
 	}
 
 #if !defined _DEBUG

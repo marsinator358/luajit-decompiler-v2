@@ -6,21 +6,15 @@ while also offering full support for gotos and stripped bytecode including upval
 
 ## Usage
 
-**WARNING: The current version is incomplete and may not work!**  
+**WARNING: The current version is incomplete and may not work!**
 
 1. Head to the release section and download the latest executable.
-2. Drag and drop a valid LuaJIT bytecode file onto the exe.
-3. If the program succeeds, then a `.lua` file containing the decompiled lua code  
-will be placed in the `output` folder located in the same directory as the exe.
+2. Drag and drop a single valid LuaJIT bytecode file or a folder containing such files onto the exe.
+3. All successfully decompiled `.lua` files are placed into the `output` folder located in the same directory as the exe.
 
 ## TODO
 
-Missing features from python decompiler:
-* recursive processing of files in a directory
-
-Other missing features:
 * multi assignments
-* improved number formatting
 * auto generated locals and do blocks for stripped bytecode
 * bytecode big endian support
 * improved decompilation logic for conditional assignments and if statements

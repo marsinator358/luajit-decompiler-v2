@@ -1899,7 +1899,7 @@ void Ast::eliminate_slots(Function& function, std::vector<Statement*>& block, Bl
 
 								(*block[i - 1]->assignment.variables.back().slotScope)->usages--;
 								block.erase(block.begin() + i);
-								i--;
+								i -= 2;
 								break;
 							}
 						}
@@ -2092,10 +2092,7 @@ void Ast::eliminate_conditions(Function& function, std::vector<Statement*>& bloc
 		targetIndex = hasBoolConstruct ? (block[i - 3]->type == AST_STATEMENT_GOTO ? i - (hasEndAssignment ? 4 : 3) : i - 2) : (hasEndAssignment ? i : i + 1);
 
 		for (uint32_t j = function.labels[targetLabel].jumpIds.size(); j--;) {
-			if (function.labels[targetLabel].jumpIds[j] > block[i]->instruction.id
-				|| (j
-					&& function.labels[targetLabel].jumpIds[j - 1] < block[index]->instruction.id))
-				continue;
+			if (function.labels[targetLabel].jumpIds[j] > block[i]->instruction.id) continue;
 
 			if (function.labels[targetLabel].jumpIds[j] < block[index]->instruction.id) {
 				index = get_block_index_from_id(block, function.labels[targetLabel].jumpIds[j] - 1);
@@ -2171,11 +2168,12 @@ void Ast::eliminate_conditions(Function& function, std::vector<Statement*>& bloc
 		}
 
 		if (previousValidIndex == INVALID_ID) continue;
+		index = previousValidIndex;
 
 		ConditionBuilder conditionBuilder(ConditionBuilder::ASSIGNMENT, *this, targetLabel,
 			hasBoolConstruct ? block[i]->instruction.attachedLabel : INVALID_ID, hasBoolConstruct ? block[i - 2]->instruction.attachedLabel : INVALID_ID);
 
-		for (uint32_t j = previousValidIndex; j < targetIndex; j++) {
+		for (uint32_t j = index; j < targetIndex; j++) {
 			switch (block[j]->type) {
 			case AST_STATEMENT_CONDITION:
 				conditionBuilder.add_node(conditionBuilder.get_node_type(block[j]->instruction.type, block[j]->condition.swapped), block[j]->instruction.attachedLabel,
@@ -2364,11 +2362,11 @@ void Ast::build_if_statements(Function& function, std::vector<Statement*>& block
 				blockInfo.index = index;
 				targetLabel = get_label_from_next_statement(function, blockInfo, true, false);
 				if (targetLabel == INVALID_ID) continue;
-				if (function.labels[targetLabel].target == block[i]->instruction.target) break;
+				if (function.labels[targetLabel].target == block[i]->instruction.target && is_valid_block(function, blockInfo, block[i]->instruction.id + 1)) break;
 				targetLabel = INVALID_ID;
 			}
 
-			if (targetLabel == INVALID_ID || !is_valid_block(function, blockInfo, block[i]->instruction.id + 1)) continue;
+			if (targetLabel == INVALID_ID) continue;
 			block[i]->type = AST_STATEMENT_IF;
 			block[i]->assignment.expressions.emplace_back(ast.new_primitive(1));
 			block[i]->block.reserve(index - i);
@@ -2395,11 +2393,11 @@ void Ast::build_if_statements(Function& function, std::vector<Statement*>& block
 					blockInfo.index = index;
 					targetLabel = get_label_from_next_statement(function, blockInfo, true, false);
 					if (targetLabel == INVALID_ID) continue;
-					if (function.labels[targetLabel].target == block[i]->block.back()->instruction.target) break;
+					if (function.labels[targetLabel].target == block[i]->block.back()->instruction.target && is_valid_block(function, blockInfo, block[i]->block.back()->instruction.id + 1)) break;
 					targetLabel = INVALID_ID;
 				}
 
-				if (targetLabel != INVALID_ID && is_valid_block(function, blockInfo, block[i]->block.back()->instruction.id + 1)) {
+				if (targetLabel != INVALID_ID) {
 					block.emplace(block.begin() + i + 1, ast.new_statement(AST_STATEMENT_ELSE));
 					block[i + 1]->block.reserve(index - i);
 					block[i + 1]->block.insert(block[i + 1]->block.begin(), block.begin() + i + 2, block.begin() + index + 2);

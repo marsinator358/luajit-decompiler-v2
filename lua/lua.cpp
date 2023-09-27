@@ -40,9 +40,7 @@ void Lua::write_block(const Ast::Function& function, const std::vector<Ast::Stat
 #endif
 
 	for (uint32_t i = 0; i < block.size(); i++) {
-		if (i) {
-			previousLineIsEmpty = false;
-
+		if (!previousLineIsEmpty) {
 			switch (block[i - 1]->type) {
 			case Ast::AST_STATEMENT_RETURN:
 				if (block[i]->type != Ast::AST_STATEMENT_RETURN) previousLineIsEmpty = true;
@@ -307,6 +305,7 @@ void Lua::write_block(const Ast::Function& function, const std::vector<Ast::Stat
 		}
 
 		write(NEW_LINE);
+		previousLineIsEmpty = false;
 	}
 }
 
@@ -800,15 +799,26 @@ void Lua::write_function_definition(const Ast::Function& function, const bool& i
 }
 
 void Lua::write_number(const double& number) {
-	//TODO
 	const uint64_t rawDouble = std::bit_cast<uint64_t>(number);
 
 	if ((rawDouble & DOUBLE_EXPONENT) == DOUBLE_SPECIAL) {
 		write(rawDouble & DOUBLE_SIGN ? "-1e309" : "1e309");
 	} else {
 		std::string string;
-		string.resize(snprintf(nullptr, 0, "%1.17g", number));
-		snprintf(string.data(), string.size() + 1, "%1.17g", number);
+		string.resize(snprintf(nullptr, 0, "%1.15g", number));
+		snprintf(string.data(), string.size() + 1, "%1.15g", number);
+
+		if (std::stod(string) != number) {
+			string.resize(snprintf(nullptr, 0, "%1.16g", number));
+			snprintf(string.data(), string.size() + 1, "%1.16g", number);
+
+			if (std::stod(string) != number) {
+				string.resize(snprintf(nullptr, 0, "%1.17g", number));
+				snprintf(string.data(), string.size() + 1, "%1.17g", number);
+				assert(std::stod(string) == number, "Failed to convert number to valid string", filePath, DEBUG_INFO);
+			}
+		}
+
 		write(string);
 	}
 }
