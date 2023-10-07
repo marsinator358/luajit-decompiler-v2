@@ -805,16 +805,16 @@ void Lua::write_number(const double& number) {
 		write(rawDouble & DOUBLE_SIGN ? "-1e309" : "1e309");
 	} else {
 		std::string string;
-		string.resize(snprintf(nullptr, 0, "%1.15g", number));
-		snprintf(string.data(), string.size() + 1, "%1.15g", number);
+		string.resize(std::snprintf(nullptr, 0, "%1.15g", number));
+		std::snprintf(string.data(), string.size() + 1, "%1.15g", number);
 
 		if (std::stod(string) != number) {
-			string.resize(snprintf(nullptr, 0, "%1.16g", number));
-			snprintf(string.data(), string.size() + 1, "%1.16g", number);
+			string.resize(std::snprintf(nullptr, 0, "%1.16g", number));
+			std::snprintf(string.data(), string.size() + 1, "%1.16g", number);
 
 			if (std::stod(string) != number) {
-				string.resize(snprintf(nullptr, 0, "%1.17g", number));
-				snprintf(string.data(), string.size() + 1, "%1.17g", number);
+				string.resize(std::snprintf(nullptr, 0, "%1.17g", number));
+				std::snprintf(string.data(), string.size() + 1, "%1.17g", number);
 				assert(std::stod(string) == number, "Failed to convert number to valid string", filePath, DEBUG_INFO);
 			}
 		}
@@ -939,7 +939,7 @@ void Lua::create_file() {
 	file = CreateFileA(filePath.c_str(), GENERIC_READ, NULL, NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
 
 	if (file != INVALID_HANDLE_VALUE) {
-		CloseHandle(file);
+		close_file();
 		assert(MessageBoxA(NULL, ("File " + filePath + " already exists.\n\nDo you want to overwrite it?").c_str(), PROGRAM_NAME, MB_ICONWARNING | MB_YESNO | MB_DEFBUTTON2) == IDYES,
 			"File already exists", filePath, DEBUG_INFO);
 	}

@@ -255,7 +255,7 @@ struct Ast::Statement {
 
 		bool isPotentialMethod = false;
 		bool isTableConstructor = false;
-		bool needsFordwardDeclaration = false;
+		bool needsForwardDeclaration = false;
 		CONSTANT_TYPE allowedConstantType = NUMBER_CONSTANT;
 		std::vector<Variable> variables;
 		std::vector<Expression*> expressions;

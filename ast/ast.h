@@ -57,6 +57,7 @@ private:
 	void collect_slot_scopes(Function& function, std::vector<Statement*>& block, BlockInfo* const& previousBlock);
 	void eliminate_slots(Function& function, std::vector<Statement*>& block, BlockInfo* const& previousBlock);
 	void eliminate_conditions(Function& function, std::vector<Statement*>& block, BlockInfo* const& previousBlock);
+	void build_multi_assignment(Function& function, std::vector<Statement*>& block);
 	void build_if_statements(Function& function, std::vector<Statement*>& block, BlockInfo* const& previousBlock);
 	void clean_up(Function& function);
 	void clean_up_block(Function& function, std::vector<Statement*>& block, uint32_t& variableCounter, uint32_t& iteratorCounter, Statement** parent_if_statement);

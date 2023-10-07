@@ -1,5 +1,9 @@
 #include "main.h"
 
+struct Assertion {
+	const std::string message;
+};
+
 static const HANDLE CONSOLE_OUTPUT = GetStdHandle(STD_OUTPUT_HANDLE);
 static const HANDLE CONSOLE_INPUT = GetStdHandle(STD_INPUT_HANDLE);
 static bool isProgressBarActive = false;
@@ -17,7 +21,7 @@ static void findFilesRecursively(const std::string& inputPath, Directory& direct
 
 	do {
 		if (pathData.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) {
-			if (!strcmp(pathData.cFileName, ".") || !strcmp(pathData.cFileName, "..")) continue;
+			if (!std::strcmp(pathData.cFileName, ".") || !std::strcmp(pathData.cFileName, "..")) continue;
 			directory.folders.emplace_back(Directory{ .path = directory.path + pathData.cFileName + "\\" });
 			findFilesRecursively(inputPath, directory.folders.back());
 			if (!directory.folders.back().files.size() && !directory.folders.back().folders.size()) directory.folders.pop_back();
@@ -37,7 +41,7 @@ static bool decompileFilesRecursively(const std::string& inputPath, const std::s
 	for (uint32_t i = 0; i < directory.files.size(); i++) {
 		outputFile = directory.files[i];
 		PathRemoveExtensionA(outputFile.data());
-		outputFile = outputFile.data();
+		outputFile = outputFile.c_str();
 		outputFile += ".lua";
 
 		Bytecode bytecode(inputPath + directory.path + directory.files[i]);
@@ -45,18 +49,17 @@ static bool decompileFilesRecursively(const std::string& inputPath, const std::s
 		Lua lua(bytecode, ast, outputPath + directory.path + outputFile);
 
 		try {
-			print("Input file: " + bytecode.filePath);
-			print("Reading bytecode...");
+			print("--------------------\nInput file: " + bytecode.filePath + "\nReading bytecode...");
 			bytecode();
 			print("Building ast...");
 			ast();
 			print("Writing lua source...");
 			lua();
 			print("Output file: " + lua.filePath);
-		} catch (const int& button) {
+		} catch (const Assertion& assertion) {
 			erase_progress_bar();
 
-			switch (button) {
+			switch (MessageBoxA(NULL, assertion.message.c_str(), PROGRAM_NAME, MB_ICONERROR | MB_CANCELTRYCONTINUE | MB_DEFBUTTON3)) {
 			case IDCANCEL:
 				return false;
 			case IDTRYAGAIN:
@@ -65,8 +68,10 @@ static bool decompileFilesRecursively(const std::string& inputPath, const std::s
 				continue;
 			case IDCONTINUE:
 				print("File skipped.");
-				continue;
 			}
+		} catch (...) {
+			MessageBoxA(NULL, std::string("Unknown exception\n\nFile: " + bytecode.filePath).c_str(), PROGRAM_NAME, MB_ICONERROR | MB_OK);
+			throw;
 		}
 	}
 
@@ -116,23 +121,27 @@ int main(const int argc, const char* const argv[]) {
 	} else {
 		root.files.emplace_back(PathFindFileNameA(inputPath.c_str()));
 		PathRemoveFileSpecA(inputPath.data());
-		inputPath = inputPath.data();
+		inputPath = inputPath.c_str();
 		inputPath += '\\';
 	}
 
 	std::string outputPath = argv[0];
 	PathRemoveFileSpecA(outputPath.data());
-	outputPath = outputPath.data();
+	outputPath = outputPath.c_str();
 	outputPath += "\\output\\";
 
-	if (!decompileFilesRecursively(inputPath, outputPath, root)) {
-		print("Aborted! Press enter to exit.");
-		input();
-		return EXIT_FAILURE;
+	try {
+		if (!decompileFilesRecursively(inputPath, outputPath, root)) {
+			print("--------------------\nAborted! Press enter to exit.");
+			input();
+			return EXIT_FAILURE;
+		}
+	} catch (...) {
+		throw;
 	}
 
 #if !defined _DEBUG
-	print("Done! Press enter to exit.");
+	print("--------------------\nDone! Press enter to exit.");
 	input();
 #endif
 	return EXIT_SUCCESS;
@@ -169,8 +178,7 @@ void erase_progress_bar() {
 }
 
 void assert(const bool& assertion, const std::string& message, const std::string& filePath, const std::string& function, const std::string& source, const uint32_t& line) {
-	if (!assertion) throw MessageBoxA(NULL, ("Error running " + function + "()\nSource: " + source + ":" + std::to_string(line)
-		+ "\n\nFile: " + filePath + "\n\n" + message).c_str(), PROGRAM_NAME, MB_ICONERROR | MB_CANCELTRYCONTINUE | MB_DEFBUTTON3);
+	if (!assertion) throw Assertion{ .message = "Error running " + function + "()\nSource: " + source + ":" + std::to_string(line) + "\n\nFile: " + filePath + "\n\n" + message };
 }
 
 std::string byte_to_string(const uint8_t& byte) {
