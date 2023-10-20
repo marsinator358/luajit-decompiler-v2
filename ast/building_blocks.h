@@ -228,7 +228,7 @@ struct Ast::Statement {
 		uint16_t d = 0;
 		uint32_t id = INVALID_ID;
 		uint32_t target = INVALID_ID;
-		uint32_t attachedLabel = INVALID_ID;
+		uint32_t label = INVALID_ID;
 	} instruction;
 
 	Function* function = nullptr;
@@ -255,7 +255,7 @@ struct Ast::Statement {
 
 		bool isPotentialMethod = false;
 		bool isTableConstructor = false;
-		bool needsForwardDeclaration = false;
+		bool forwardDeclaration = false;
 		CONSTANT_TYPE allowedConstantType = NUMBER_CONSTANT;
 		std::vector<Variable> variables;
 		std::vector<Expression*> expressions;

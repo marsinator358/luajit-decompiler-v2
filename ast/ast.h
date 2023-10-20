@@ -40,7 +40,7 @@ private:
 
 	struct BlockInfo {
 		uint32_t index = INVALID_ID;
-		std::vector<Statement*> const& block;
+		std::vector<Statement*>& block;
 		BlockInfo* const previousBlock;
 	};
 	
@@ -60,7 +60,7 @@ private:
 	void build_multi_assignment(Function& function, std::vector<Statement*>& block);
 	void build_if_statements(Function& function, std::vector<Statement*>& block, BlockInfo* const& previousBlock);
 	void clean_up(Function& function);
-	void clean_up_block(Function& function, std::vector<Statement*>& block, uint32_t& variableCounter, uint32_t& iteratorCounter, Statement** parent_if_statement);
+	void clean_up_block(Function& function, std::vector<Statement*>& block, uint32_t& variableCounter, uint32_t& iteratorCounter, BlockInfo* const& previousBlock);
 	Expression* new_slot(const uint8_t& slot);
 	Expression* new_literal(const uint8_t& literal);
 	Expression* new_signed_literal(const uint16_t& signedLiteral);

@@ -183,23 +183,11 @@ void assert(const bool& assertion, const std::string& message, const std::string
 
 std::string byte_to_string(const uint8_t& byte) {
 	char string[] = "0x00";
-	uint8_t value;
+	uint8_t digit;
 	
 	for (uint8_t i = 2; i--;) {
-		value = (byte >> i * 4) & 0xF;
-
-		switch (value) {
-		case 0xA:
-		case 0xB:
-		case 0xC:
-		case 0xD:
-		case 0xE:
-		case 0xF:
-			string[3 - i] = 'A' + value - 0xA;
-			continue;
-		}
-
-		string[3 - i] = '0' + value;
+		digit = (byte >> i * 4) & 0xF;
+		string[3 - i] = digit >= 0xA ? 'A' + digit - 0xA : '0' + digit;
 	}
 
 	return string;

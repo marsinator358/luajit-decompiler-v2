@@ -1,8 +1,8 @@
 ## LuaJIT Decompiler v2
 
-The goal of this project is to replace the old and now mostly defunct python decompiler  
-with a new and completely rewritten version which fixes all of the bugs and quirks the python decompiler had  
-while also offering full support for gotos and stripped bytecode including upvalues.
+*LuaJIT Decompiler v2* is a replacement tool for the old and now mostly defunct python decompiler.  
+The project fixes all of the bugs and quirks the python decompiler had while also offering  
+full support for gotos and stripped bytecode including upvalues.
 
 ## Usage
 
@@ -15,7 +15,6 @@ Feel free to [report any issues](https://github.com/marsinator358/luajit-decompi
 
 ## TODO
 
-* auto generated locals and do blocks for stripped bytecode
 * bytecode big endian support
 * improved decompilation logic for conditional assignments and if statements
 * ~multi threading for faster recursive file processing~  

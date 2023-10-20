@@ -9,7 +9,7 @@ Lua::~Lua() {
 void Lua::operator()() {
 	print_progress_bar();
 	prototypeDataLeft = bytecode.prototypesTotalSize;
-	write_chunkname();
+	write_header();
 	write_block(*ast.chunk, ast.chunk->block);
 	prototypeDataLeft -= ast.chunk->prototype.prototypeSize;
 	print_progress_bar(bytecode.prototypesTotalSize - prototypeDataLeft, bytecode.prototypesTotalSize);
@@ -19,10 +19,11 @@ void Lua::operator()() {
 	erase_progress_bar();
 }
 
-void Lua::write_chunkname() {
+void Lua::write_header() {
+	write(UTF8_BOM);
 	if (!bytecode.header.chunkname.size()) return;
 	write("-- chunkname: ");
-	write_string(bytecode.header.chunkname, false);
+	write_string(bytecode.header.chunkname);
 	write(NEW_LINE, NEW_LINE);
 }
 
@@ -88,7 +89,7 @@ void Lua::write_block(const Ast::Function& function, const std::vector<Ast::Stat
 			if (i != block.size() - 1) write(" end");
 			break;
 		case Ast::AST_STATEMENT_GOTO:
-			write("goto ", function.labels[block[i]->instruction.attachedLabel].name);
+			write("goto ", function.labels[block[i]->instruction.label].name);
 			break;
 		case Ast::AST_STATEMENT_NUMERIC_FOR:
 			write("for ");
@@ -203,11 +204,17 @@ void Lua::write_block(const Ast::Function& function, const std::vector<Ast::Stat
 				}
 
 				write("function ");
-				write_variable(block[i]->assignment.variables.back(), false);
-				write_function_definition(*block[i]->assignment.expressions.back()->function,
-					block[i]->assignment.variables.back().type == Ast::AST_VARIABLE_TABLE_INDEX
+
+				if (block[i]->assignment.variables.back().type == Ast::AST_VARIABLE_TABLE_INDEX
 					&& block[i]->assignment.expressions.back()->function->parameterNames.size()
-					&& block[i]->assignment.expressions.back()->function->parameterNames.front() == "self");
+					&& block[i]->assignment.expressions.back()->function->parameterNames.front() == "self") {
+					write_variable(*block[i]->assignment.variables.back().table->variable, false);
+					write(":", block[i]->assignment.variables.back().tableIndex->constant->string);
+					write_function_definition(*block[i]->assignment.expressions.back()->function, true);
+				} else {
+					write_variable(block[i]->assignment.variables.back(), false);
+					write_function_definition(*block[i]->assignment.expressions.back()->function, false);
+				}
 
 				if (i != block.size() - 1) {
 					write(NEW_LINE);
@@ -216,10 +223,11 @@ void Lua::write_block(const Ast::Function& function, const std::vector<Ast::Stat
 					previousLineIsEmpty = true;
 					continue;
 				}
-			} else {
-				write_assignment(block[i]->assignment.variables, block[i]->assignment.expressions, " = ", i);
+
+				break;
 			}
 
+			write_assignment(block[i]->assignment.variables, block[i]->assignment.expressions, " = ", i);
 			break;
 		case Ast::AST_STATEMENT_FUNCTION_CALL:
 			write_function_call(*block[i]->assignment.expressions.back()->functionCall, i);
@@ -300,7 +308,7 @@ void Lua::write_block(const Ast::Function& function, const std::vector<Ast::Stat
 			write("end");
 			break;
 		case Ast::AST_STATEMENT_LABEL:
-			write("::", function.labels[block[i]->instruction.attachedLabel].name, "::");
+			write("::", function.labels[block[i]->instruction.label].name, "::");
 			break;
 		}
 
@@ -342,7 +350,7 @@ void Lua::write_expression(const Ast::Expression& expression, const bool& usePar
 			break;
 		case Ast::AST_CONSTANT_STRING:
 			write("\"");
-			write_string(expression.constant->string, true);
+			write_string(expression.constant->string);
 			write("\"");
 			break;
 		}
@@ -823,63 +831,104 @@ void Lua::write_number(const double& number) {
 	}
 }
 
-void Lua::write_string(const std::string& string, const bool& escapeChars) {
+void Lua::write_string(const std::string& string) {
 	char escapeSequence[] = "\\x00";
-	uint8_t value;
+	uint32_t value;
+	uint8_t digit;
 
 	for (uint32_t i = 0; i < string.size(); i++) {
-		if (string[i] >= ' ' && string[i] <= '~') {
-			if (escapeChars) {
+		value = string[i];
+
+		if (!(value & 0x80)) {
+			if (string[i] >= ' ' && string[i] <= '~') {
 				switch (string[i]) {
 				case '"':
 				case '\\':
 					writeBuffer += '\\';
 				}
-			}
 
-			writeBuffer += string[i];
-			continue;
-		}
-
-		switch (string[i]) {
-		case '\a':
-			write("\\a");
-			continue;
-		case '\b':
-			write("\\b");
-			continue;
-		case '\t':
-			write("\\t");
-			continue;
-		case '\n':
-			write("\\n");
-			continue;
-		case '\v':
-			write("\\v");
-			continue;
-		case '\f':
-			write("\\f");
-			continue;
-		case '\r':
-			write("\\r");
-			continue;
-		}
-
-		for (uint8_t j = 2; j--;) {
-			value = (std::bit_cast<uint8_t>(string[i]) >> j * 4) & 0xF;
-
-			switch (value) {
-			case 0xA:
-			case 0xB:
-			case 0xC:
-			case 0xD:
-			case 0xE:
-			case 0xF:
-				escapeSequence[3 - j] = 'A' + value - 0xA;
+				writeBuffer += string[i];
 				continue;
 			}
 
-			escapeSequence[3 - j] = '0' + value;
+			switch (string[i]) {
+			case '\a':
+				write("\\a");
+				continue;
+			case '\b':
+				write("\\b");
+				continue;
+			case '\t':
+				write("\\t");
+				continue;
+			case '\n':
+				write("\\n");
+				continue;
+			case '\v':
+				write("\\v");
+				continue;
+			case '\f':
+				write("\\f");
+				continue;
+			case '\r':
+				write("\\r");
+				continue;
+			}
+		} else if ((value & 0xE0) == 0xC0) {
+			if (i <= string.size() - 2) {
+				value <<= 8;
+				value |= string[i + 1];
+
+				if ((value & 0xC0) == 0x80
+					&& value >= 0xC280
+					&& value <= 0xDFBF) {
+					writeBuffer += string[i];
+					writeBuffer += string[i + 1];
+					i++;
+					continue;
+				}
+			}
+		} else if ((value & 0xF0) == 0xE0) {
+			if (i <= string.size() - 3) {
+				value <<= 16;
+				value |= (uint16_t)string[i + 1] << 8;
+				value |= string[i + 2];
+
+				if ((value & 0xC0C0) == 0x8080
+					&& ((value >= 0xE0A080
+							&& value < 0xEDA080)
+						|| (value > 0xEDBFBF
+							&& value <= 0xEFBFBF))) {
+					writeBuffer += string[i];
+					writeBuffer += string[i + 1];
+					writeBuffer += string[i + 2];
+					i += 2;
+					continue;
+				}
+			}
+		} else if ((value & 0xF8) == 0xF0) {
+			if (i <= string.size() - 4) {
+				value <<= 24;
+				value |= (uint32_t)string[i + 1] << 16;
+				value |= (uint16_t)string[i + 2] << 8;
+				value |= string[i + 3];
+
+				if ((value & 0xC0C0C0) == 0x808080
+					&& value >= 0xF0908080
+					&& value <= 0xF48FBFBF) {
+					writeBuffer += string[i];
+					writeBuffer += string[i + 1];
+					writeBuffer += string[i + 2];
+					writeBuffer += string[i + 3];
+					i += 3;
+					continue;
+				}
+			}
+		}
+
+		for (uint8_t j = 2; j--;) {
+			digit = (string[i] >> j * 4) & 0xF;
+			escapeSequence[3 - j] = digit >= 0xA ? 'A' + digit - 0xA : '0' + digit;
 		}
 
 		writeBuffer += escapeSequence;
