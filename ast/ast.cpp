@@ -2923,9 +2923,10 @@ void Ast::clean_up_block(Function& function, std::vector<Statement*>& block, uin
 				}
 
 				if (!block[i]->assignment.forwardDeclaration) {
-					block[i - 1] = nullptr;
 					block[i]->type = AST_STATEMENT_DECLARATION;
 					block[i]->assignment.forwardDeclaration = true;
+					block[i]->instruction.target = block[i - 1]->instruction.target;
+					block[i - 1] = nullptr;
 
 					while (block[i]->assignment.expressions.size()
 						&& block[i]->assignment.expressions.back()->type == AST_EXPRESSION_CONSTANT
@@ -2999,7 +3000,6 @@ void Ast::clean_up_block(Function& function, std::vector<Statement*>& block, uin
 		if (block[i]->type != AST_STATEMENT_DECLARATION) continue;
 
 		if (block[i]->assignment.forwardDeclaration) {
-
 			for (uint32_t j = i; j < block.size(); j++) {
 				if (block[j]->type != AST_STATEMENT_LABEL) continue;
 
@@ -3013,6 +3013,13 @@ void Ast::clean_up_block(Function& function, std::vector<Statement*>& block, uin
 					block[i]->block.reserve(j - 1 - i);
 					block[i]->block.insert(block[i]->block.begin(), block.begin() + i + 1, block.begin() + j);
 					block.erase(block.begin() + i + 1, block.begin() + j);
+
+					if (block[i]->block.size() && block[i]->block.back()->type == AST_STATEMENT_DO) {
+						block[i]->block.reserve(block[i]->block.size() + block[i]->block.back()->block.size());
+						block[i]->block.insert(block[i]->block.begin() + block[i]->block.size() - 1, block[i]->block.back()->block.begin(), block[i]->block.back()->block.begin() + block[i]->block.back()->block.size());
+						block[i]->block.pop_back();
+					}
+
 					break;
 				}
 
