@@ -37,6 +37,6 @@ private:
 	const Ast& ast;
 	HANDLE file = INVALID_HANDLE_VALUE;
 	std::string writeBuffer;
-	uint16_t indentLevel = 0;
+	uint32_t indentLevel = 0;
 	uint64_t prototypeDataLeft = 0;
 };

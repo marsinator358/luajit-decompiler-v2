@@ -319,7 +319,7 @@ void Lua::write_block(const Ast::Function& function, const std::vector<Ast::Stat
 
 void Lua::write_expression(const Ast::Expression& expression, const bool& useParentheses) {
 	uint32_t nextListIndex, nextFieldIndex;
-	uint8_t precedence, operatorPrecedence;
+	uint8_t operatorPrecedence, operandPrecedence;
 	bool parentheses, isFirstField, isFieldFound;
 	if (useParentheses) write("(");
 
@@ -549,23 +549,28 @@ void Lua::write_expression(const Ast::Expression& expression, const bool& usePar
 		write("}");
 		break;
 	case Ast::AST_EXPRESSION_BINARY_OPERATION:
-		precedence = get_operator_precedence(expression);
-		operatorPrecedence = get_operator_precedence(*expression.binaryOperation->leftOperand);
+		operatorPrecedence = get_operator_precedence(expression);
+		operandPrecedence = get_operator_precedence(*expression.binaryOperation->leftOperand);
+		parentheses = false;
 
-		if (operatorPrecedence < precedence) {
-			parentheses = true;
-		} else if (operatorPrecedence == precedence) {
-			switch (precedence) {
+		if (operandPrecedence == operatorPrecedence) {
+			switch (operandPrecedence) {
 			case 3:
 			case 7:
 				parentheses = true;
+			}
+		} else if (operandPrecedence < operatorPrecedence) {
+			parentheses = true;
+		} else if (operatorPrecedence == 7 && expression.binaryOperation->leftOperand->type == Ast::AST_EXPRESSION_CONSTANT) {
+			switch (expression.binaryOperation->leftOperand->constant->type) {
+			case Ast::AST_CONSTANT_NUMBER:
+			case Ast::AST_CONSTANT_CDATA_IMAGINARY:
+				if (std::bit_cast<uint64_t>(expression.binaryOperation->leftOperand->constant->number) & DOUBLE_SIGN) parentheses = true;
 				break;
-			default:
-				parentheses = false;
+			case Ast::AST_CONSTANT_CDATA_SIGNED:
+				if (expression.binaryOperation->leftOperand->constant->signed_integer < 0) parentheses = true;
 				break;
 			}
-		} else {
-			parentheses = false;
 		}
 
 		write_expression(*expression.binaryOperation->leftOperand, parentheses);
@@ -618,23 +623,21 @@ void Lua::write_expression(const Ast::Expression& expression, const bool& usePar
 			break;
 		}
 
-		operatorPrecedence = get_operator_precedence(*expression.binaryOperation->rightOperand);
+		parentheses = false;
 
-		if (operatorPrecedence < precedence) {
-			parentheses = true;
-		} else if (operatorPrecedence == precedence) {
-			switch (precedence) {
-			case 2:
-			case 4:
-			case 5:
+		if (expression.binaryOperation->rightOperand->type == Ast::AST_EXPRESSION_BINARY_OPERATION) {
+			operandPrecedence = get_operator_precedence(*expression.binaryOperation->rightOperand);
+
+			if (operandPrecedence == operatorPrecedence) {
+				switch (operandPrecedence) {
+				case 2:
+				case 4:
+				case 5:
+					parentheses = true;
+				}
+			} else if (operandPrecedence < operatorPrecedence) {
 				parentheses = true;
-				break;
-			default:
-				parentheses = false;
-				break;
 			}
-		} else {
-			parentheses = false;
 		}
 
 		write_expression(*expression.binaryOperation->rightOperand, parentheses);

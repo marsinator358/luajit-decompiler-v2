@@ -1,6 +1,6 @@
 #include "..\main.h"
 
-Ast::Ast(const Bytecode& bytecode) : bytecode(bytecode) {}
+Ast::Ast(const Bytecode& bytecode, const bool& ignoreDebugInfo) : bytecode(bytecode), ignoreDebugInfo(ignoreDebugInfo) {}
 
 Ast::~Ast() {
 	for (uint32_t i = statements.size(); i--;) {
@@ -17,7 +17,7 @@ Ast::~Ast() {
 }
 
 Ast::Function*& Ast::new_function(const Bytecode::Prototype& prototype, const uint32_t& level) {
-	functions.emplace_back(new Function(prototype, level));
+	functions.emplace_back(new Function(prototype, level, ignoreDebugInfo));
 	return functions.back();
 }
 
@@ -1087,6 +1087,7 @@ void Ast::collect_slot_scopes(Function& function, std::vector<Statement*>& block
 										&& index <= i - 4
 										&& (((block[i - 3]->type == AST_STATEMENT_GOTO
 													|| block[i - 3]->type == AST_STATEMENT_BREAK)
+												&& !function.is_valid_label(block[i - 3]->instruction.label)
 												&& block[i - 3]->instruction.target == function.labels[extendedTargetLabel].target)
 											|| (block[i - 3]->type == AST_STATEMENT_CONDITION
 												&& block[i - 3]->assignment.expressions.size() == 2
@@ -1095,6 +1096,7 @@ void Ast::collect_slot_scopes(Function& function, std::vector<Statement*>& block
 										&& block[i]->assignment.expressions.back()->constant->type == AST_CONSTANT_TRUE
 										&& (block[i - 1]->type == AST_STATEMENT_GOTO
 											|| block[i - 1]->type == AST_STATEMENT_BREAK)
+										&& !function.is_valid_label(block[i - 1]->instruction.label)
 										&& block[i - 1]->instruction.target == function.labels[targetLabel].target
 										&& block[i - 2]->type == AST_STATEMENT_ASSIGNMENT
 										&& block[i - 2]->assignment.expressions.back()->type == AST_EXPRESSION_CONSTANT
@@ -1140,9 +1142,9 @@ void Ast::collect_slot_scopes(Function& function, std::vector<Statement*>& block
 								&& block[index]->assignment.variables.back().type == AST_VARIABLE_SLOT) {
 								if (block[index]->assignment.variables.back().slot == targetSlot) isPossibleCondition = true;
 							} else if ((block[index]->type == AST_STATEMENT_ASSIGNMENT
-								&& block[index]->assignment.variables.size() == 1
-								&& block[index]->assignment.variables.back().type == AST_VARIABLE_TABLE_INDEX
-								&& block[index]->assignment.variables.back().table->variable->slot == targetSlot)
+									&& block[index]->assignment.variables.size() == 1
+									&& block[index]->assignment.variables.back().type == AST_VARIABLE_TABLE_INDEX
+									&& block[index]->assignment.variables.back().table->variable->slot == targetSlot)
 								|| (block[index]->type == AST_STATEMENT_CONDITION
 									&& block[index]->instruction.target == function.labels[extendedTargetLabel].target
 									&& !block[index]->assignment.variables.size())) {
@@ -1164,7 +1166,7 @@ void Ast::collect_slot_scopes(Function& function, std::vector<Statement*>& block
 											if (block[index]->assignment.isTableConstructor
 												&& (hasBoolConstruct
 													|| block[index]->instruction.id > function.labels[targetLabel].jumpIds.front())
-												&& function.is_valid_block_range(block[index + 1]->instruction.id, block[hasBoolConstruct ? i - 4 : i]->instruction.id))
+												&& function.is_valid_block_range(block[index]->instruction.id, block[hasBoolConstruct ? i - 4 : i]->instruction.id, true))
 												isPossibleCondition = true;
 											break;
 										}
@@ -1204,7 +1206,7 @@ void Ast::collect_slot_scopes(Function& function, std::vector<Statement*>& block
 
 									if (block[index]->assignment.variables.size()) {
 										if (block[index]->assignment.variables.back().slot == targetSlot) isPossibleCondition = true;
-									} else if (block[index]->assignment.expressions.back()->variable->slot == targetSlot) {
+									} else if (index && block[index]->assignment.expressions.back()->variable->slot == targetSlot) {
 										index--;
 
 										if (block[index]->type == AST_STATEMENT_ASSIGNMENT
@@ -1234,7 +1236,7 @@ void Ast::collect_slot_scopes(Function& function, std::vector<Statement*>& block
 														&& block[index]->assignment.variables.back().type == AST_VARIABLE_SLOT
 														&& block[index]->assignment.variables.back().slot == targetSlot) {
 														if (block[index]->assignment.isTableConstructor
-															&& function.is_valid_block_range(block[index + 1]->instruction.id, block[blockIndex]->instruction.id))
+															&& function.is_valid_block_range(block[index]->instruction.id, block[blockIndex]->instruction.id, true))
 															isPossibleCondition = true;
 														break;
 													}
@@ -1284,7 +1286,7 @@ void Ast::collect_slot_scopes(Function& function, std::vector<Statement*>& block
 									break;
 								case AST_STATEMENT_GOTO:
 								case AST_STATEMENT_BREAK:
-									if (block[j]->instruction.type != Bytecode::BC_OP_JMP) break;
+									if (function.is_valid_label(block[j]->instruction.label) || block[j]->instruction.type != Bytecode::BC_OP_JMP) break;
 								case AST_STATEMENT_CONDITION:
 									if (block[j]->instruction.target != function.labels[targetLabel].target
 										&& block[j]->instruction.target != function.labels[extendedTargetLabel].target
@@ -1301,10 +1303,7 @@ void Ast::collect_slot_scopes(Function& function, std::vector<Statement*>& block
 
 							if (isPossibleCondition) {
 								for (uint32_t j = conditionBlocks.size(); j--;) {
-									if ((conditionBlocks[j].size() > 1
-											&& !function.is_valid_block_range(conditionBlocks[j][1]->instruction.id, conditionBlocks[j].back()->instruction.id)
-										|| (function.is_valid_label(conditionBlocks[j].front()->instruction.label)
-											&& function.labels[conditionBlocks[j].front()->instruction.label].jumpIds.back() >= conditionBlocks[j].front()->instruction.id))) {
+									if (!function.is_valid_block_range(conditionBlocks[j].front()->instruction.id, conditionBlocks[j].back()->instruction.id, true)) {
 										isPossibleCondition = false;
 										break;
 									}
@@ -1480,7 +1479,8 @@ void Ast::eliminate_slots(Function& function, std::vector<Statement*>& block, Bl
 			switch (block[i]->assignment.variables.back().type) {
 			case AST_VARIABLE_SLOT:
 				if (block[i]->assignment.expressions.back()->type == AST_EXPRESSION_BINARY_OPERATION
-					&& block[i]->assignment.expressions.back()->binaryOperation->type == AST_BINARY_EXPONENTATION
+					&& block[i]->assignment.expressions.back()->binaryOperation->type != AST_BINARY_CONCATENATION
+					&& block[i]->assignment.openSlots.size() == 2
 					&& i >= 2
 					&& !function.is_valid_label(block[i]->instruction.label)
 					&& !function.is_valid_label(block[i - 1]->instruction.label)
@@ -1691,6 +1691,7 @@ void Ast::eliminate_slots(Function& function, std::vector<Statement*>& block, Bl
 							&& block[i]->assignment.expressions.back()->constant->type == AST_CONSTANT_TRUE
 							&& (block[i - 1]->type == AST_STATEMENT_GOTO
 								|| block[i - 1]->type == AST_STATEMENT_BREAK)
+							&& !function.is_valid_label(block[i - 1]->instruction.label)
 							&& block[i - 1]->instruction.type == Bytecode::BC_OP_JMP
 							&& block[i - 1]->instruction.target == function.labels[targetLabel].target
 							&& block[i - 2]->type == AST_STATEMENT_ASSIGNMENT
@@ -1706,6 +1707,7 @@ void Ast::eliminate_slots(Function& function, std::vector<Statement*>& block, Bl
 							case AST_STATEMENT_GOTO:
 							case AST_STATEMENT_BREAK:
 								if (i < 5
+									|| function.is_valid_label(block[i - 3]->instruction.label)
 									|| block[i - 3]->instruction.type != Bytecode::BC_OP_JMP
 									|| block[i - 3]->instruction.target != function.labels[extendedTargetLabel].target
 									|| (!function.is_valid_label(block[i]->instruction.label)
@@ -1841,7 +1843,8 @@ void Ast::eliminate_slots(Function& function, std::vector<Statement*>& block, Bl
 										continue;
 									case AST_STATEMENT_GOTO:
 									case AST_STATEMENT_BREAK:
-										if (block[j]->instruction.type != Bytecode::BC_OP_JMP
+										if (function.is_valid_label(block[j]->instruction.label)
+											|| block[j]->instruction.type != Bytecode::BC_OP_JMP
 											|| block[j]->instruction.target != function.labels[targetLabel].target
 											|| block[j - 1]->assignment.expressions.back()->type != AST_EXPRESSION_CONSTANT
 											|| !get_constant_type(block[j - 1]->assignment.expressions.back()))
@@ -2025,6 +2028,7 @@ void Ast::eliminate_conditions(Function& function, std::vector<Statement*>& bloc
 		case AST_STATEMENT_GOTO:
 		case AST_STATEMENT_BREAK:
 			if (!i
+				|| function.is_valid_label(block[i]->instruction.label)
 				|| block[i]->instruction.type != Bytecode::BC_OP_JMP
 				|| block[i]->instruction.target != function.labels[targetLabel].target
 				|| block[i - 1]->type != AST_STATEMENT_ASSIGNMENT
@@ -2052,6 +2056,7 @@ void Ast::eliminate_conditions(Function& function, std::vector<Statement*>& bloc
 			&& block[i]->assignment.expressions.back()->constant->type == AST_CONSTANT_TRUE
 			&& (block[i - 1]->type == AST_STATEMENT_GOTO
 				|| block[i - 1]->type == AST_STATEMENT_BREAK)
+			&& !function.is_valid_label(block[i - 1]->instruction.label)
 			&& block[i - 1]->instruction.type == Bytecode::BC_OP_JMP
 			&& block[i - 1]->instruction.target == function.labels[targetLabel].target
 			&& block[i - 2]->type == AST_STATEMENT_ASSIGNMENT
@@ -2067,6 +2072,7 @@ void Ast::eliminate_conditions(Function& function, std::vector<Statement*>& bloc
 			case AST_STATEMENT_GOTO:
 			case AST_STATEMENT_BREAK:
 				if (i < 4
+					|| function.is_valid_label(block[i - 3]->instruction.label)
 					|| block[i - 3]->instruction.type != Bytecode::BC_OP_JMP
 					|| block[i - 3]->instruction.target != function.labels[extendedTargetLabel].target
 					|| (!function.is_valid_label(block[i]->instruction.label)
@@ -2198,6 +2204,7 @@ void Ast::eliminate_conditions(Function& function, std::vector<Statement*>& bloc
 						&& ++k != targetIndex
 						&& (block[k]->type == AST_STATEMENT_GOTO
 							|| block[k]->type == AST_STATEMENT_BREAK)
+						&& !function.is_valid_label(block[k]->instruction.label)
 						&& block[k]->instruction.type == Bytecode::BC_OP_JMP
 						&& block[k]->instruction.target == function.labels[targetLabel].target)
 						continue;
@@ -2677,9 +2684,10 @@ void Ast::build_if_statements(Function& function, std::vector<Statement*>& block
 					&& function.labels[targetLabel].target == block[i]->instruction.target
 					&& is_valid_block(function, blockInfo, block[i]->instruction.id + 2))
 					break;
+				targetLabel = INVALID_ID;
 			}
 
-			assert(targetLabel != INVALID_ID && function.labels[targetLabel].target == block[i]->instruction.target, "Failed to build if statement", bytecode.filePath, DEBUG_INFO);
+			assert(targetLabel != INVALID_ID, "Failed to build if statement", bytecode.filePath, DEBUG_INFO);
 			block[i]->block.reserve(index - i);
 			block[i]->block.insert(block[i]->block.begin(), block.begin() + i + 1, block.begin() + index + 1);
 			block.erase(block.begin() + i + 1, block.begin() + index + 1);
@@ -3017,6 +3025,8 @@ void Ast::clean_up_block(Function& function, std::vector<Statement*>& block, uin
 					if (block[i]->block.size() && block[i]->block.back()->type == AST_STATEMENT_DO) {
 						block[i]->block.reserve(block[i]->block.size() + block[i]->block.back()->block.size());
 						block[i]->block.insert(block[i]->block.begin() + block[i]->block.size() - 1, block[i]->block.back()->block.begin(), block[i]->block.back()->block.begin() + block[i]->block.back()->block.size());
+						block[i]->block.back()->block.clear();
+						block[i]->block.back()->block.shrink_to_fit();
 						block[i]->block.pop_back();
 					}
 
@@ -3091,7 +3101,7 @@ bool Ast::is_valid_block(Function& function, const BlockInfo& blockInfo, const u
 	if (blockInfo.index == blockInfo.block.size() - 1) return blockInfo.previousBlock ? is_valid_block(function, *blockInfo.previousBlock, blockBegin) : true;
 	const uint32_t blockEnd = blockInfo.block[blockInfo.index + 1]->instruction.label != INVALID_ID
 		? function.labels[blockInfo.block[blockInfo.index + 1]->instruction.label].target : blockInfo.block[blockInfo.index + 1]->instruction.id;
-	return blockEnd == INVALID_ID ? true : (blockEnd > blockBegin ? function.is_valid_block_range(blockBegin, blockEnd - 1) : true);
+	return blockEnd == INVALID_ID ? true : (blockEnd > blockBegin ? function.is_valid_block_range(blockBegin, blockEnd - 1, false) : true);
 }
 
 void Ast::check_valid_name(Constant* const& constant) {

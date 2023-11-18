@@ -27,7 +27,7 @@ public:
 	#include "building_blocks.h"
 	#include "function.h"
 
-	Ast(const Bytecode& bytecode);
+	Ast(const Bytecode& bytecode, const bool& ignoreDebugInfo);
 	~Ast();
 
 	void operator()();
@@ -79,6 +79,7 @@ private:
 	static CONSTANT_TYPE get_constant_type(Expression* const& expression);
 
 	const Bytecode& bytecode;
+	const bool ignoreDebugInfo;
 	bool isFR2Enabled = false;
 	std::vector<Statement*> statements;
 	std::vector<Function*> functions;

@@ -110,19 +110,7 @@ struct Bytecode::Instruction {
 };
 
 static BC_OP get_op_type(const uint8_t& byte, const uint8_t& version) {
-	uint8_t type = byte;
-
-	if (version == Bytecode::BC_VERSION_1 && type >= BC_OP_ISTYPE) {
-		type += 2;
-
-		if (type >= BC_OP_TGETR) {
-			type++;
-
-			if (type >= BC_OP_TSETR) type++;
-		}
-	}
-
-	return (BC_OP)type;
+	return (BC_OP)(version == Bytecode::BC_VERSION_1 && byte >= BC_OP_ISTYPE ? (byte >= BC_OP_TGETR - 2 ? (byte >= BC_OP_TSETR - 3 ? byte + 4 : byte + 3) : byte + 2) : byte);
 }
 
 static bool is_op_abc_format(const BC_OP& instruction) {

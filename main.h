@@ -1,8 +1,17 @@
+/*
+Requirements for compiling:
+C++20
+Windows API
+Default char is unsigned
+Increased stack reserve size (e.g. 10MB)
+*/
+
 #include <bit>
 #include <cmath>
 #include <cstdint>
 #include <string>
 #include <vector>
+
 #include <windows.h>
 #include <fileapi.h>
 #include <shlwapi.h>
@@ -15,6 +24,15 @@ constexpr uint64_t DOUBLE_EXPONENT = 0x7FF0000000000000;
 constexpr uint64_t DOUBLE_FRACTION = 0x000FFFFFFFFFFFFF;
 constexpr uint64_t DOUBLE_SPECIAL = DOUBLE_EXPONENT;
 constexpr uint64_t DOUBLE_NEGATIVE_ZERO = DOUBLE_SIGN;
+
+struct {
+	bool showHelp = false;
+	bool silentAssertions = false;
+	bool ignoreDebugInfo = false;
+	std::string inputPath;
+	std::string outputPath;
+	std::string extensionFilter;
+} arguments;
 
 void print(const std::string& message);
 std::string input();

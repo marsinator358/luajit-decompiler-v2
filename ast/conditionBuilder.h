@@ -21,8 +21,8 @@ struct Ast::ConditionBuilder {
 			UNCONDITIONAL,
 			AND,
 			OR,
-			NOT_OR,
 			NOT_AND,
+			NOT_OR,
 			END_TARGET,
 			TRUE_TARGET,
 			FALSE_TARGET,
@@ -103,7 +103,7 @@ struct Ast::ConditionBuilder {
 		conditionNodes.back()->expressions = expressions;
 	}
 
-	void link_nodes() {
+	bool link_nodes() {
 		switch (type) {
 		case ASSIGNMENT:
 			conditionNodes.emplace_back(falseTarget);
@@ -125,10 +125,13 @@ struct Ast::ConditionBuilder {
 				conditionNodes[j]->incomingNodes++;
 				break;
 			}
+
+			if (!conditionNodes[i]->targetNode) return false;
 		}
 
 		conditionNodes.pop_back();
 		if (type == ASSIGNMENT) conditionNodes.pop_back();
+		return true;
 	}
 
 	void fix_return_nodes() {
@@ -325,9 +328,12 @@ struct Ast::ConditionBuilder {
 	}
 
 	Expression* build_condition() {
-		link_nodes();
-		fix_return_nodes();
-		return build_boolean_logic() ? build_expression(conditionNodes.back()) : nullptr;
+		if (link_nodes()) {
+			fix_return_nodes();
+			if (build_boolean_logic()) return build_expression(conditionNodes.back());
+		}
+
+		return nullptr;
 	}
 
 	Ast& ast;
