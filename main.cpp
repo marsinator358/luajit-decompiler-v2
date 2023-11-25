@@ -14,6 +14,15 @@ static bool isCommandLine;
 static bool isProgressBarActive = false;
 static uint32_t filesSkipped = 0;
 
+static struct {
+	bool showHelp = false;
+	bool silentAssertions = false;
+	bool ignoreDebugInfo = false;
+	std::string inputPath;
+	std::string outputPath;
+	std::string extensionFilter;
+} arguments;
+
 struct Directory {
 	const std::string path;
 	std::vector<Directory> folders;
@@ -202,7 +211,9 @@ int main(int argc, char* argv[]) {
 		return EXIT_SUCCESS;
 	} else if (!arguments.inputPath.size()) {
 		print("No input path specified!");
+#ifndef _DEBUG
 		if (isCommandLine) return EXIT_FAILURE;
+#endif
 		print(
 			"Please drag and drop a valid LuaJIT bytecode file or a folder containing such files\n"
 			"onto this program window and press enter to continue or press enter to exit."
@@ -294,8 +305,8 @@ int main(int argc, char* argv[]) {
 		throw;
 	}
 
-#if !defined _DEBUG
-	print("--------------------\n" + (filesSkipped ? "Failed to decompile " + std::to_string(filesSkipped) + " file(s).\n" : "") + "Done!");
+#ifndef _DEBUG
+	print("--------------------\n" + (filesSkipped ? "Failed to decompile " + std::to_string(filesSkipped) + " file" + (filesSkipped > 1 ? "s" : "") + ".\n" : "") + "Done!");
 	wait_for_exit();
 #endif
 	return EXIT_SUCCESS;

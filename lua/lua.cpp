@@ -32,13 +32,11 @@ void Lua::write_block(const Ast::Function& function, const std::vector<Ast::Stat
 	bool isFunctionDefinition;
 	bool previousLineIsEmpty = true;
 
-#if defined _DEBUG
 	if (!block.size()) {
 		write_indent();
 		write("-- block empty", NEW_LINE);
 		return;
 	}
-#endif
 
 	for (uint32_t i = 0; i < block.size(); i++) {
 		if (!previousLineIsEmpty) {
@@ -73,25 +71,28 @@ void Lua::write_block(const Ast::Function& function, const std::vector<Ast::Stat
 				break;
 			}
 
-			if (previousLineIsEmpty) {
-				write_indent();
-				write(NEW_LINE);
-			}
+			if (previousLineIsEmpty) write(NEW_LINE);
 		}
-
-		write_indent();
 
 		switch (block[i]->type) {
 		case Ast::AST_STATEMENT_RETURN:
+			write_indent();
 			if (i != block.size() - 1) write("do ");
-			write("return ");
-			write_expression_list(block[i]->assignment.expressions, block[i]->assignment.multresReturn);
+			write("return");
+
+			if (block[i]->assignment.expressions.size() || block[i]->assignment.multresReturn) {
+				write(" ");
+				write_expression_list(block[i]->assignment.expressions, block[i]->assignment.multresReturn);
+			}
+
 			if (i != block.size() - 1) write(" end");
 			break;
 		case Ast::AST_STATEMENT_GOTO:
+			write_indent();
 			write("goto ", function.labels[block[i]->instruction.label].name);
 			break;
 		case Ast::AST_STATEMENT_NUMERIC_FOR:
+			write_indent();
 			write("for ");
 			write_variable(block[i]->assignment.variables.back(), false);
 			write(" = ");
@@ -112,6 +113,7 @@ void Lua::write_block(const Ast::Function& function, const std::vector<Ast::Stat
 			write("end");
 			break;
 		case Ast::AST_STATEMENT_GENERIC_FOR:
+			write_indent();
 			write("for ");
 			write_assignment(block[i]->assignment.variables, block[i]->assignment.expressions, " in ", false);
 			write(" do", NEW_LINE);
@@ -122,6 +124,7 @@ void Lua::write_block(const Ast::Function& function, const std::vector<Ast::Stat
 			write("end");
 			break;
 		case Ast::AST_STATEMENT_BREAK:
+			write_indent();
 			if (i != block.size() - 1) write("do ");
 			write("break");
 			if (i != block.size() - 1) write(" end");
@@ -152,22 +155,18 @@ void Lua::write_block(const Ast::Function& function, const std::vector<Ast::Stat
 			}
 
 			if (isFunctionDefinition) {
-				if (!previousLineIsEmpty) {
-					write(NEW_LINE);
-					write_indent();
-				}
-
+				if (!previousLineIsEmpty) write(NEW_LINE);
+				write_indent();
 				write("local function ", (*block[i]->assignment.variables.back().slotScope)->name);
 				write_function_definition(*block[i]->assignment.expressions.back()->function, false);
 
 				if (i != block.size() - 1) {
-					write(NEW_LINE);
-					write_indent();
-					write(NEW_LINE);
+					write(NEW_LINE, NEW_LINE);
 					previousLineIsEmpty = true;
 					continue;
 				}
 			} else {
+				write_indent();
 				write("local ");
 				write_assignment(block[i]->assignment.variables, block[i]->assignment.expressions, " = ", false);
 			}
@@ -198,11 +197,8 @@ void Lua::write_block(const Ast::Function& function, const std::vector<Ast::Stat
 			}
 
 			if (isFunctionDefinition) {
-				if (!previousLineIsEmpty) {
-					write(NEW_LINE);
-					write_indent();
-				}
-
+				if (!previousLineIsEmpty) write(NEW_LINE);
+				write_indent();
 				write("function ");
 
 				if (block[i]->assignment.variables.back().type == Ast::AST_VARIABLE_TABLE_INDEX
@@ -217,9 +213,7 @@ void Lua::write_block(const Ast::Function& function, const std::vector<Ast::Stat
 				}
 
 				if (i != block.size() - 1) {
-					write(NEW_LINE);
-					write_indent();
-					write(NEW_LINE);
+					write(NEW_LINE, NEW_LINE);
 					previousLineIsEmpty = true;
 					continue;
 				}
@@ -227,12 +221,15 @@ void Lua::write_block(const Ast::Function& function, const std::vector<Ast::Stat
 				break;
 			}
 
+			write_indent();
 			write_assignment(block[i]->assignment.variables, block[i]->assignment.expressions, " = ", i);
 			break;
 		case Ast::AST_STATEMENT_FUNCTION_CALL:
+			write_indent();
 			write_function_call(*block[i]->assignment.expressions.back()->functionCall, i);
 			break;
 		case Ast::AST_STATEMENT_IF:
+			write_indent();
 			write("if ");
 			write_expression(*block[i]->assignment.expressions.back(), false);
 			write(" then", NEW_LINE);
@@ -281,6 +278,7 @@ void Lua::write_block(const Ast::Function& function, const std::vector<Ast::Stat
 			write("end");
 			break;
 		case Ast::AST_STATEMENT_WHILE:
+			write_indent();
 			write("while ");
 			write_expression(*block[i]->assignment.expressions.back(), false);
 			write(" do", NEW_LINE);
@@ -291,6 +289,7 @@ void Lua::write_block(const Ast::Function& function, const std::vector<Ast::Stat
 			write("end");
 			break;
 		case Ast::AST_STATEMENT_REPEAT:
+			write_indent();
 			write("repeat", NEW_LINE);
 			indentLevel++;
 			write_block(function, block[i]->block);
@@ -300,6 +299,7 @@ void Lua::write_block(const Ast::Function& function, const std::vector<Ast::Stat
 			write_expression(*block[i]->assignment.expressions.back(), false);
 			break;
 		case Ast::AST_STATEMENT_DO:
+			write_indent();
 			write("do", NEW_LINE);
 			indentLevel++;
 			write_block(function, block[i]->block);
@@ -308,6 +308,7 @@ void Lua::write_block(const Ast::Function& function, const std::vector<Ast::Stat
 			write("end");
 			break;
 		case Ast::AST_STATEMENT_LABEL:
+			write_indent();
 			write("::", function.labels[block[i]->instruction.label].name, "::");
 			break;
 		}
@@ -801,7 +802,13 @@ void Lua::write_function_definition(const Ast::Function& function, const bool& i
 	write_indent();
 	write("-- function ", std::to_string(function.id), NEW_LINE);
 #endif
-	write_block(function, function.block);
+	if (function.block.size()) {
+		write_block(function, function.block);
+	} else {
+		write_indent();
+		write("return", NEW_LINE);
+	}
+
 	indentLevel--;
 	write_indent();
 	write("end");
@@ -987,7 +994,7 @@ void Lua::write_indent() {
 }
 
 void Lua::create_file() {
-#if !defined _DEBUG
+#ifndef _DEBUG
 	file = CreateFileA(filePath.c_str(), GENERIC_READ, NULL, NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
 
 	if (file != INVALID_HANDLE_VALUE) {

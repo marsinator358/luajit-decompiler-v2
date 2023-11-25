@@ -260,9 +260,10 @@ void Ast::group_jumps(Function& function) {
 			if (function.block[i]->instruction.target == function.block[i]->instruction.id
 				|| !i
 				|| function.block[i - 1]->instruction.type != Bytecode::BC_OP_JMP
-				|| function.block[i - 1]->instruction.d != Bytecode::BC_OP_JMP_BIAS)
+				|| function.block[i - 1]->instruction.d != Bytecode::BC_OP_JMP_BIAS
+				|| function.labels[function.block[i]->instruction.label].jumpIds.size() > 1)
 				continue;
-			function.remove_jump(function.block[i - 1]->instruction.id, function.block[i - 1]->instruction.id);
+			function.remove_jump(function.block[i - 1]->instruction.id, function.block[i - 1]->instruction.target);
 			function.block[i - 1]->type = AST_STATEMENT_CONDITION;
 			function.block[i - 1]->instruction.target = function.block[i]->instruction.target;
 			function.block.erase(function.block.begin() + i);
@@ -979,7 +980,7 @@ void Ast::collect_slot_scopes(Function& function, std::vector<Statement*>& block
 			function.slotScopeCollector.extend_scopes(block[i]->instruction.id);
 			blockInfo.index = i;
 			collect_slot_scopes(function, block[i]->block, block[i]->type == AST_STATEMENT_LOOP ? &blockInfo : nullptr);
-			function.slotScopeCollector.merge_scopes(block[i]->instruction.target);
+			function.slotScopeCollector.merge_scopes(block[i]->instruction.target - 1);
 			break;
 		case AST_STATEMENT_DECLARATION:
 			block[i]->instruction.id = INVALID_ID;
@@ -1302,8 +1303,17 @@ void Ast::collect_slot_scopes(Function& function, std::vector<Statement*>& block
 							}
 
 							if (isPossibleCondition) {
-								for (uint32_t j = conditionBlocks.size(); j--;) {
-									if (!function.is_valid_block_range(conditionBlocks[j].front()->instruction.id, conditionBlocks[j].back()->instruction.id, true)) {
+								for (uint32_t j = conditionBlocks.size(); isPossibleCondition && j--;) {
+									for (uint32_t k = conditionBlocks[j].size(); k--;) {
+										if (!function.is_valid_label(conditionBlocks[j][k]->instruction.label)
+											|| ((function.labels[conditionBlocks[j][k]->instruction.label].jumpIds.front() >= conditionBlocks[j].front()->instruction.id
+													|| !k
+													|| (hasBoolConstruct
+														&& conditionBlocks[j][k - 1]->type == AST_STATEMENT_CONDITION
+														&& (conditionBlocks[j][k - 1]->instruction.target == block[i]->instruction.id
+															|| conditionBlocks[j][k - 1]->instruction.target == block[i - 2]->instruction.id)))
+												&& function.labels[conditionBlocks[j][k]->instruction.label].jumpIds.back() < conditionBlocks[j][k]->instruction.id))
+											continue;
 										isPossibleCondition = false;
 										break;
 									}
@@ -1395,7 +1405,7 @@ void Ast::collect_slot_scopes(Function& function, std::vector<Statement*>& block
 
 			if (function.is_valid_label(block[i]->instruction.label)) {
 				id = function.get_scope_end_from_label(block[i]->instruction.label);
-				function.slotScopeCollector.merge_scopes(id);
+				if (id > block[i]->instruction.id) function.slotScopeCollector.merge_scopes(id);
 				function.slotScopeCollector.extend_scopes(function.get_scope_begin_from_label(block[i]->instruction.label, id));
 			}
 		}
@@ -1881,9 +1891,8 @@ void Ast::eliminate_slots(Function& function, std::vector<Statement*>& block, Bl
 							}
 
 							if (index != INVALID_ID) {
-								//TODO
 								expression = conditionBuilder.build_condition();
-								assert(expression, "Failed to build condition in function " + std::to_string(function.id), bytecode.filePath, DEBUG_INFO);
+								if (!expression) break;
 								block[i]->assignment.expressions.back() = expression;
 
 								for (uint32_t j = index; j < i; j++) {
@@ -2071,25 +2080,16 @@ void Ast::eliminate_conditions(Function& function, std::vector<Statement*>& bloc
 				break;
 			case AST_STATEMENT_GOTO:
 			case AST_STATEMENT_BREAK:
-				if (i < 4
-					|| function.is_valid_label(block[i - 3]->instruction.label)
-					|| block[i - 3]->instruction.type != Bytecode::BC_OP_JMP
-					|| block[i - 3]->instruction.target != function.labels[extendedTargetLabel].target
-					|| (!function.is_valid_label(block[i]->instruction.label)
-						&& !function.is_valid_label(block[i - 2]->instruction.label)))
-					break;
-
-				if (index == i - 2 && !function.is_valid_label(block[i]->instruction.label)) {
-					if (function.labels[block[i - 2]->instruction.label].jumpIds.front() < block[i - 2]->instruction.id) break;
-					index = get_block_index_from_id(block, function.labels[block[i - 2]->instruction.label].jumpIds.front() - 1);
-					
-					if (index == INVALID_ID) {
-						index = i - 2;
-						break;
-					}
-				}
-
-				hasBoolConstruct = true;
+				if (i >= 4
+					&& (!function.is_valid_label(block[i - 3]->instruction.label)
+						|| (function.labels[block[i - 3]->instruction.label].jumpIds.size() == 1
+							&& block[i - 4]->type == AST_STATEMENT_CONDITION
+							&& block[i - 4]->assignment.variables.size()))
+					&& block[i - 3]->instruction.type == Bytecode::BC_OP_JMP
+					&& block[i - 3]->instruction.target == function.labels[extendedTargetLabel].target
+					&& (function.is_valid_label(block[i]->instruction.label)
+						|| function.is_valid_label(block[i - 2]->instruction.label)))
+					hasBoolConstruct = true;
 				break;
 			}
 
@@ -2147,6 +2147,13 @@ void Ast::eliminate_conditions(Function& function, std::vector<Statement*>& bloc
 
 			if (function.labels[targetLabel].jumpIds[j] < block[index]->instruction.id) {
 				index = get_block_index_from_id(block, function.labels[targetLabel].jumpIds[j] - 1);
+
+				if (hasBoolConstruct
+					&& index == i - 2
+					&& !function.is_valid_label(block[i]->instruction.label)) {
+					index = get_block_index_from_id(block, function.labels[block[i - 2]->instruction.label].jumpIds.front() - 1);
+					if (index == INVALID_ID) index = i - 2;
+				}
 			}
 
 			for (uint32_t k = i; index != INVALID_ID && block[index]->instruction.id < block[k]->instruction.id; k--) {
@@ -2188,9 +2195,10 @@ void Ast::eliminate_conditions(Function& function, std::vector<Statement*>& bloc
 						&& block[k]->assignment.expressions.back()->variable->type == AST_VARIABLE_SLOT
 						&& block[k]->assignment.expressions.back()->variable->slot == block[assignmentIndex]->assignment.variables.back().slot) {
 						continue;
-					} else if (block[k]->instruction.target == function.labels[extendedTargetLabel].target && !hasEndAssignment) {
-						continue;
-					} else if (block[k]->instruction.target > block[k]->instruction.id && block[k]->instruction.target < function.labels[targetLabel].target) {
+					} else if ((block[k]->instruction.target == function.labels[extendedTargetLabel].target
+							&& !hasEndAssignment)
+						|| (block[k]->instruction.target > block[k]->instruction.id
+							&& block[k]->instruction.target < function.labels[targetLabel].target)) {
 						continue;
 					}
 
@@ -2266,9 +2274,8 @@ void Ast::eliminate_conditions(Function& function, std::vector<Statement*>& bloc
 			conditionBuilder.add_node(ConditionBuilder::Node::TRUTHY_TEST, function.labels.size(), targetLabel, &expressions);
 		}
 		
-		//TODO
 		expressions.back() = conditionBuilder.build_condition();
-		assert(expressions.back(), "Failed to build condition in function " + std::to_string(function.id), bytecode.filePath, DEBUG_INFO);
+		if (!expressions.back()) continue;
 		block[assignmentIndex]->assignment.expressions.back() = expressions.back();
 
 		for (uint32_t j = index; j <= i; j++) {
@@ -2370,7 +2377,7 @@ void Ast::eliminate_conditions(Function& function, std::vector<Statement*>& bloc
 				}
 
 				expressions.back() = conditionBuilder.build_condition();
-				assert(expressions.back(), "Failed to build condition in function " + std::to_string(function.id), bytecode.filePath, DEBUG_INFO);
+				assert(expressions.back(), "Failed to build condition", bytecode.filePath, DEBUG_INFO);
 				block[i]->assignment.expressions = expressions;
 
 				for (uint32_t j = index; j <= i; j++) {
@@ -2603,7 +2610,8 @@ void Ast::build_if_statements(Function& function, std::vector<Statement*>& block
 
 			for (index = i; index < block.size(); index++) {
 				blockInfo.index = index;
-				targetLabel = get_label_from_next_statement(function, blockInfo, true, false);
+				targetLabel = get_label_from_next_statement(function, blockInfo, false, false);
+				if (targetLabel == INVALID_ID || function.labels[targetLabel].target != block[i]->instruction.target) targetLabel = get_label_from_next_statement(function, blockInfo, true, false);
 				if (targetLabel == INVALID_ID) continue;
 				if (function.labels[targetLabel].target == block[i]->instruction.target && is_valid_block(function, blockInfo, block[i]->instruction.id + 1)) break;
 				targetLabel = INVALID_ID;
@@ -2643,7 +2651,8 @@ void Ast::build_if_statements(Function& function, std::vector<Statement*>& block
 
 				for (index = i; index < block.size(); index++) {
 					blockInfo.index = index;
-					targetLabel = get_label_from_next_statement(function, blockInfo, true, false);
+					targetLabel = get_label_from_next_statement(function, blockInfo, false, false);
+					if (targetLabel == INVALID_ID || function.labels[targetLabel].target != block[i]->block.back()->instruction.target) targetLabel = get_label_from_next_statement(function, blockInfo, true, false);
 					if (targetLabel == INVALID_ID) continue;
 					if (function.labels[targetLabel].target == block[i]->block.back()->instruction.target && is_valid_block(function, blockInfo, block[i]->block.back()->instruction.id + 1)) break;
 					targetLabel = INVALID_ID;
@@ -2674,12 +2683,37 @@ void Ast::build_if_statements(Function& function, std::vector<Statement*>& block
 	for (uint32_t i = block.size(); i--;) {
 		switch (block[i]->type) {
 		case AST_STATEMENT_CONDITION:
+			if (i
+				&& block[i]->instruction.type == Bytecode::BC_OP_JMP
+				&& block[i]->assignment.expressions.back()->type == AST_EXPRESSION_CONSTANT
+				&& block[i]->assignment.expressions.back()->constant->type == AST_CONSTANT_FALSE
+				&& !function.is_valid_label(block[i]->instruction.label)
+				&& block[i - 1]->type == AST_STATEMENT_ASSIGNMENT
+				&& block[i - 1]->assignment.variables.size() == 1
+				&& block[i - 1]->assignment.variables.back().type == AST_VARIABLE_SLOT
+				&& block[i - 1]->assignment.expressions.size() == 1
+				&& get_constant_type(block[i - 1]->assignment.expressions.back())) {
+				function.remove_jump(block[i]->instruction.id, block[i]->instruction.target);
+				block[i]->assignment.expressions.clear();
+				block[i]->type = AST_STATEMENT_GOTO;
+				block.emplace(block.begin() + i, new_statement(AST_STATEMENT_GOTO));
+				block[i]->instruction.type = Bytecode::BC_OP_JMP;
+				block[i]->instruction.id = block[i + 1]->instruction.id;
+				block[i + 1]->instruction.id++;
+				block[i]->instruction.target = block[i + 1]->instruction.id;
+				function.add_jump(block[i]->instruction.id, block[i]->instruction.target);
+				function.add_jump(block[i + 1]->instruction.id, block[i + 1]->instruction.target);
+				block[i + 1]->instruction.label = function.get_label_from_id(block[i + 1]->instruction.id);
+				continue;
+			}
+
 			block[i]->type = AST_STATEMENT_IF;
 			targetLabel = INVALID_ID;
 
 			for (index = i; index < block.size(); index++) {
 				blockInfo.index = index;
-				targetLabel = get_label_from_next_statement(function, blockInfo, true, false);
+				targetLabel = get_label_from_next_statement(function, blockInfo, false, false);
+				if (targetLabel == INVALID_ID || function.labels[targetLabel].target != block[i]->instruction.target) targetLabel = get_label_from_next_statement(function, blockInfo, true, false);
 				if (targetLabel != INVALID_ID
 					&& function.labels[targetLabel].target == block[i]->instruction.target
 					&& is_valid_block(function, blockInfo, block[i]->instruction.id + 2))
@@ -2804,23 +2838,85 @@ void Ast::clean_up_block(Function& function, std::vector<Statement*>& block, uin
 
 			if (block[i]->type == AST_STATEMENT_LOOP) {
 				if (block[i]->block.size() && block[i]->block.back()->type == AST_STATEMENT_GOTO) {
-					if (block[i]->block.back()->instruction.target == block[i]->instruction.id) {
+					if (block[i]->instruction.id == block[i]->block.back()->instruction.target) {
 						function.remove_jump(block[i]->block.back()->instruction.id, block[i]->block.back()->instruction.target);
 						block[i]->type = AST_STATEMENT_WHILE;
 						block[i]->assignment.expressions.emplace_back(new_primitive(2));
 						block[i]->block.back()->type = AST_STATEMENT_EMPTY;
+					} else if (block.size() != 1) {
+						for (uint32_t j = i; j--
+							&& block[j]->type == AST_STATEMENT_IF
+							&& !block[j]->block.size();) {
+							if (!function.is_valid_label(block[j]->instruction.label)) continue;
+							if (function.is_valid_label(block[i]->instruction.label) || function.labels[block[j]->instruction.label].target != block[i]->block.back()->instruction.target) break;
+							function.remove_jump(block[i]->block.back()->instruction.id, block[i]->block.back()->instruction.target);
+							block[i]->type = AST_STATEMENT_WHILE;
+							block[i]->instruction.label = block[j]->instruction.label;
+
+							for (Expression* expression; i != j; i--) {
+								expression = new_expression(AST_EXPRESSION_BINARY_OPERATION);
+								expression->binaryOperation->type = AST_BINARY_OR;
+								expression->binaryOperation->rightOperand = new_primitive(2);
+								expression->binaryOperation->leftOperand = block[i - 1]->assignment.expressions.back();
+
+								if (block[i]->assignment.expressions.size()) {
+									block[i - 1]->assignment.expressions.back() = new_expression(AST_EXPRESSION_BINARY_OPERATION);
+									block[i - 1]->assignment.expressions.back()->binaryOperation->type = AST_BINARY_AND;
+									block[i - 1]->assignment.expressions.back()->binaryOperation->rightOperand = block[i]->assignment.expressions.back();
+									block[i - 1]->assignment.expressions.back()->binaryOperation->leftOperand = expression;
+									block[i]->assignment.expressions.back() = block[i - 1]->assignment.expressions.back();
+								} else {
+									block[i]->assignment.expressions.resize(1, expression);
+								}
+
+								block.erase(block.begin() + i - 1);
+							}
+
+							block[i]->block.back()->type = AST_STATEMENT_EMPTY;
+							break;
+						}
 					} else if (previousBlock
 						&& previousBlock->block[previousBlock->index]->type == AST_STATEMENT_IF
-						&& block.size() == 1
-						&& !function.is_valid_label(block[i]->instruction.label)
-						&& function.is_valid_label(previousBlock->block[previousBlock->index]->instruction.label)
-						&& function.labels[previousBlock->block[previousBlock->index]->instruction.label].target == block[i]->block.back()->instruction.target) {
-						function.remove_jump(block[i]->block.back()->instruction.id, block[i]->block.back()->instruction.target);
-						block[i]->type = AST_STATEMENT_WHILE;
-						block[i]->assignment.expressions.emplace_back(previousBlock->block[previousBlock->index]->assignment.expressions.back());
-						block[i]->instruction.label = previousBlock->block[previousBlock->index]->instruction.label;
-						block[i]->block.back()->type = AST_STATEMENT_EMPTY;
-						previousBlock->block[previousBlock->index] = block[i];
+						&& !function.is_valid_label(block[i]->instruction.label)) {
+						if (function.is_valid_label(previousBlock->block[previousBlock->index]->instruction.label)) {
+							if (function.labels[previousBlock->block[previousBlock->index]->instruction.label].target == block[i]->block.back()->instruction.target) {
+								function.remove_jump(block[i]->block.back()->instruction.id, block[i]->block.back()->instruction.target);
+								block[i]->type = AST_STATEMENT_WHILE;
+								block[i]->assignment.expressions.emplace_back(previousBlock->block[previousBlock->index]->assignment.expressions.back());
+								block[i]->instruction.label = previousBlock->block[previousBlock->index]->instruction.label;
+								block[i]->block.back()->type = AST_STATEMENT_EMPTY;
+								previousBlock->block[previousBlock->index] = block[i];
+							}
+						} else {
+							for (uint32_t j = previousBlock->index - 1; j--
+								&& previousBlock->block[j]->type == AST_STATEMENT_IF
+								&& !previousBlock->block[j]->block.size();) {
+								if (!function.is_valid_label(previousBlock->block[j]->instruction.label)) continue;
+								if (function.labels[previousBlock->block[j]->instruction.label].target != block[i]->block.back()->instruction.target) break;
+								function.remove_jump(block[i]->block.back()->instruction.id, block[i]->block.back()->instruction.target);
+								block[i]->type = AST_STATEMENT_WHILE;
+								block[i]->assignment.expressions.emplace_back(previousBlock->block[previousBlock->index]->assignment.expressions.back());
+								block[i]->instruction.label = previousBlock->block[j]->instruction.label;
+								previousBlock->block[j]->instruction.label = INVALID_ID;
+
+								for (Expression* expression; j != previousBlock->index - 1; j++) {
+									expression = new_expression(AST_EXPRESSION_BINARY_OPERATION);
+									expression->binaryOperation->type = AST_BINARY_OR;
+									expression->binaryOperation->rightOperand = new_primitive(2);
+									expression->binaryOperation->leftOperand = previousBlock->block[j]->assignment.expressions.back();
+									previousBlock->block[j]->assignment.expressions.back() = new_expression(AST_EXPRESSION_BINARY_OPERATION);
+									previousBlock->block[j]->assignment.expressions.back()->binaryOperation->type = AST_BINARY_AND;
+									previousBlock->block[j]->assignment.expressions.back()->binaryOperation->rightOperand = block[i]->assignment.expressions.back();
+									previousBlock->block[j]->assignment.expressions.back()->binaryOperation->leftOperand = expression;
+									block[i]->assignment.expressions.back() = previousBlock->block[j]->assignment.expressions.back();
+									previousBlock->block[j]->type = AST_STATEMENT_EMPTY;
+								}
+
+								block[i]->block.back()->type = AST_STATEMENT_EMPTY;
+								previousBlock->block[previousBlock->index] = block[i];
+								break;
+							}
+						}
 					}
 				}
 

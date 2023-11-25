@@ -342,7 +342,7 @@ struct Ast::Function {
 			for (uint8_t i = slotInfos.size(); i--;) {
 				if (slotInfos[i].isParameter || !slotInfos[i].activeSlotScope) continue;
 
-				for (uint32_t j = slotInfos[i].slotScopes.size() - 1; j-- && (*slotInfos[i].slotScopes[j])->scopeBegin < id;) {
+				for (uint32_t j = slotInfos[i].slotScopes.size() - 1; j-- && (*slotInfos[i].slotScopes[j])->scopeBegin <= id;) {
 					(*slotInfos[i].activeSlotScope)->scopeEnd = (*slotInfos[i].slotScopes[j])->scopeEnd;
 					(*slotInfos[i].activeSlotScope)->usages += (*slotInfos[i].slotScopes[j])->usages + 1;
 					*slotInfos[i].slotScopes[j] = *slotInfos[i].activeSlotScope;
