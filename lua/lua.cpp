@@ -545,7 +545,7 @@ void Lua::write_expression(const Ast::Expression& expression, const bool& usePar
 		}
 
 		indentLevel--;
-		write(NEW_LINE);
+		write(",", NEW_LINE);
 		write_indent();
 		write("}");
 		break;
