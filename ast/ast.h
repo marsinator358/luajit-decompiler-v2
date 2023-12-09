@@ -27,7 +27,7 @@ public:
 	#include "building_blocks.h"
 	#include "function.h"
 
-	Ast(const Bytecode& bytecode, const bool& ignoreDebugInfo);
+	Ast(const Bytecode& bytecode, const bool& ignoreDebugInfo, const bool& minimizeDiffs);
 	~Ast();
 
 	void operator()();
@@ -44,7 +44,7 @@ private:
 		BlockInfo* const previousBlock;
 	};
 	
-	Function*& new_function(const Bytecode::Prototype& prototype, const uint32_t& level = 0);
+	Function*& new_function(const Bytecode::Prototype& prototype, const uint32_t& level);
 	Statement*& new_statement(const AST_STATEMENT& type);
 	Expression*& new_expression(const AST_EXPRESSION& type);
 	void build_functions(Function& function, uint32_t& functionCounter);
@@ -80,6 +80,7 @@ private:
 
 	const Bytecode& bytecode;
 	const bool ignoreDebugInfo;
+	const bool minimizeDiffs;
 	bool isFR2Enabled = false;
 	std::vector<Statement*> statements;
 	std::vector<Function*> functions;

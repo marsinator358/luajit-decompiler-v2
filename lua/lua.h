@@ -1,7 +1,7 @@
 class Lua {
 public:
 
-	Lua(const Bytecode& bytecode, const Ast& ast, const std::string& filePath);
+	Lua(const Bytecode& bytecode, const Ast& ast, const std::string& filePath, const bool& minimizeDiffs);
 	~Lua();
 
 	void operator()();
@@ -35,6 +35,7 @@ private:
 
 	const Bytecode& bytecode;
 	const Ast& ast;
+	const bool minimizeDiffs;
 	HANDLE file = INVALID_HANDLE_VALUE;
 	std::string writeBuffer;
 	uint32_t indentLevel = 0;

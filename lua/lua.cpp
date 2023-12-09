@@ -1,6 +1,6 @@
 #include "..\main.h"
 
-Lua::Lua(const Bytecode& bytecode, const Ast& ast, const std::string& filePath) : bytecode(bytecode), ast(ast), filePath(filePath) {}
+Lua::Lua(const Bytecode& bytecode, const Ast& ast, const std::string& filePath, const bool& minimizeDiffs) : bytecode(bytecode), ast(ast), filePath(filePath), minimizeDiffs(minimizeDiffs){}
 
 Lua::~Lua() {
 	close_file();
@@ -541,6 +541,7 @@ void Lua::write_expression(const Ast::Expression& expression, const bool& usePar
 		}
 
 		indentLevel--;
+		if (minimizeDiffs) write(",");
 		write(NEW_LINE);
 		write_indent();
 		write("}");
