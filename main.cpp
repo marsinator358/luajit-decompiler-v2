@@ -108,7 +108,9 @@ static bool decompileFilesRecursively(const Directory& directory) {
 static char* parseArguments(const int& argc, char** const& argv) {
 	if (argc < 2) return nullptr;
 	arguments.inputPath = argv[1];
+#ifndef _DEBUG
 	if (!isCommandLine) return nullptr;
+#endif
 	bool isInputPathSet = true;
 
 	if (arguments.inputPath.size() && arguments.inputPath.front() == '-') {
@@ -191,13 +193,19 @@ int main(int argc, char* argv[]) {
 	{
 		DWORD consoleProcessId;
 		GetWindowThreadProcessId(GetConsoleWindow(), &consoleProcessId);
+#ifdef _DEBUG
+		isCommandLine = false;
+#else
 		isCommandLine = consoleProcessId != GetCurrentProcessId();
+#endif
 	}
 	
 	if (parseArguments(argc, argv)) {
 		print("Invalid argument: " + std::string(parseArguments(argc, argv)) + "\nUse -? to show usage and options.");
 		return EXIT_FAILURE;
-	} else if (arguments.showHelp) {
+	}
+	
+	if (arguments.showHelp) {
 		print(
 			"Usage: luajit-decompiler-v2.exe INPUT_PATH [options]\n"
 			"\n"
@@ -205,28 +213,34 @@ int main(int argc, char* argv[]) {
 			"  -h, -?, --help\t\tShow this message\n"
 			"  -o, --output OUTPUT_PATH\tOverride output directory\n"
 			"  -e, --extension EXTENSION\tOnly decompile files with the specific extension\n"
-			"  -s, --silent_assertions\tDisable assertion error pop-up window\n\t\t\t\t  and auto skip files that fail to decompile\n"
+			"  -s, --silent_assertions\tDisable assertion error pop-up window\n"
+			"\t\t\t\t  and auto skip files that fail to decompile\n"
 			"  -i, --ignore_debug_info\tIgnore bytecode debug info"
 		);
 		return EXIT_SUCCESS;
-	} else if (!arguments.inputPath.size()) {
+	}
+	
+	if (!arguments.inputPath.size()) {
 		print("No input path specified!");
-#ifndef _DEBUG
 		if (isCommandLine) return EXIT_FAILURE;
-#endif
-		print(
-			"Please drag and drop a valid LuaJIT bytecode file or a folder containing such files\n"
-			"onto this program window and press enter to continue or press enter to exit."
-		);
-		arguments.inputPath = input();
-		if (!arguments.inputPath.size()) return EXIT_FAILURE;
-
-		if (arguments.inputPath.size() >= 2
-			&& arguments.inputPath.front() == '"'
-			&& arguments.inputPath.back() == '"') {
-			arguments.inputPath.pop_back();
-			arguments.inputPath.erase(arguments.inputPath.begin());
-		}
+		print("Please select a valid LuaJIT bytecode file.");
+		arguments.inputPath.resize(1024, NULL);
+		OPENFILENAMEA dialogInfo = {
+			.lStructSize = sizeof(OPENFILENAMEA),
+			.hwndOwner = NULL,
+			.lpstrFilter = NULL,
+			.lpstrCustomFilter = NULL,
+			.lpstrFile = arguments.inputPath.data(),
+			.nMaxFile = (DWORD)arguments.inputPath.size(),
+			.lpstrFileTitle = NULL,
+			.lpstrInitialDir = NULL,
+			.lpstrTitle = PROGRAM_NAME,
+			.Flags = OFN_FILEMUSTEXIST | OFN_PATHMUSTEXIST,
+			.lpstrDefExt = NULL,
+			.FlagsEx = NULL
+		};
+		if (!GetOpenFileNameA(&dialogInfo)) return EXIT_FAILURE;
+		arguments.inputPath = arguments.inputPath.c_str();
 	}
 
 	DWORD pathAttributes;

@@ -386,18 +386,14 @@ void Lua::write_expression(const Ast::Expression& expression, const bool& usePar
 		nextFieldIndex = 0;
 		isFirstField = true;
 
-		if (expression.table->constants.list.size()
-			&& (expression.table->constants.list.front()->type != Ast::AST_EXPRESSION_CONSTANT
-				|| expression.table->constants.list.front()->constant->type != Ast::AST_CONSTANT_NIL)) {
+		if (expression.table->constants.list.size() && expression.table->constants.list.front()->constant->type != Ast::AST_CONSTANT_NIL) {
 			write("[0] = ");
 			write_expression(*expression.table->constants.list.front(), false);
 			isFirstField = false;
 		}
 
 		while (!expression.table->multresField || nextListIndex < expression.table->multresIndex) {
-			if (nextListIndex < expression.table->constants.list.size()
-				&& (expression.table->constants.list[nextListIndex]->type != Ast::AST_EXPRESSION_CONSTANT
-					|| expression.table->constants.list[nextListIndex]->constant->type != Ast::AST_CONSTANT_NIL)) {
+			if (nextListIndex < expression.table->constants.list.size() && expression.table->constants.list[nextListIndex]->constant->type != Ast::AST_CONSTANT_NIL) {
 				if (!isFirstField) {
 					write(",", NEW_LINE);
 					write_indent();
@@ -485,7 +481,7 @@ void Lua::write_expression(const Ast::Expression& expression, const bool& usePar
 		}
 
 		for (uint32_t i = nextListIndex; i < expression.table->constants.list.size(); i++) {
-			if (expression.table->constants.list[i]->type == Ast::AST_EXPRESSION_CONSTANT && expression.table->constants.list[i]->constant->type == Ast::AST_CONSTANT_NIL) continue;
+			if (expression.table->constants.list[i]->constant->type == Ast::AST_CONSTANT_NIL) continue;
 
 			if (!isFirstField) {
 				write(",", NEW_LINE);
@@ -503,7 +499,7 @@ void Lua::write_expression(const Ast::Expression& expression, const bool& usePar
 				write_indent();
 			}
 
-			if (expression.table->constants.fields[i].key->type == Ast::AST_EXPRESSION_CONSTANT && expression.table->constants.fields[i].key->constant->isName) {
+			if (expression.table->constants.fields[i].key->constant->isName) {
 				write(expression.table->constants.fields[i].key->constant->string);
 			} else {
 				write("[");
@@ -784,15 +780,9 @@ void Lua::write_expression_list(const std::vector<Ast::Expression*>& expressions
 void Lua::write_function_definition(const Ast::Function& function, const bool& isMethod) {
 	write("(");
 
-	for (uint8_t i = 0; i < function.parameterNames.size(); i++) {
-		if (!i && isMethod) continue;
-
-		if (i != function.parameterNames.size() - 1 || function.isVariadic) {
-			write(function.parameterNames[i], ", ");
-			continue;
-		}
-
+	for (uint8_t i = isMethod ? 1 : 0; i < function.parameterNames.size(); i++) {
 		write(function.parameterNames[i]);
+		if (i != function.parameterNames.size() - 1 || function.isVariadic) write(", ");
 	}
 
 	if (function.isVariadic) write("...");
@@ -821,24 +811,25 @@ void Lua::write_number(const double& number) {
 
 	if ((rawDouble & DOUBLE_EXPONENT) == DOUBLE_SPECIAL) {
 		write(rawDouble & DOUBLE_SIGN ? "-1e309" : "1e309");
-	} else {
-		std::string string;
-		string.resize(std::snprintf(nullptr, 0, "%1.15g", number));
-		std::snprintf(string.data(), string.size() + 1, "%1.15g", number);
+		return;
+	}
+
+	std::string string;
+	string.resize(std::snprintf(nullptr, 0, "%1.15g", number));
+	std::snprintf(string.data(), string.size() + 1, "%1.15g", number);
+
+	if (std::stod(string) != number) {
+		string.resize(std::snprintf(nullptr, 0, "%1.16g", number));
+		std::snprintf(string.data(), string.size() + 1, "%1.16g", number);
 
 		if (std::stod(string) != number) {
-			string.resize(std::snprintf(nullptr, 0, "%1.16g", number));
-			std::snprintf(string.data(), string.size() + 1, "%1.16g", number);
-
-			if (std::stod(string) != number) {
-				string.resize(std::snprintf(nullptr, 0, "%1.17g", number));
-				std::snprintf(string.data(), string.size() + 1, "%1.17g", number);
-				assert(std::stod(string) == number, "Failed to convert number to valid string", filePath, DEBUG_INFO);
-			}
+			string.resize(std::snprintf(nullptr, 0, "%1.17g", number));
+			std::snprintf(string.data(), string.size() + 1, "%1.17g", number);
+			assert(std::stod(string) == number, "Failed to convert number to valid string", filePath, DEBUG_INFO);
 		}
-
-		write(string);
 	}
+
+	write(string);
 }
 
 void Lua::write_string(const std::string& string) {
