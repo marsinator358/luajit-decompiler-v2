@@ -1,6 +1,6 @@
 #include "..\main.h"
 
-Ast::Ast(const Bytecode& bytecode, const bool& ignoreDebugInfo) : bytecode(bytecode), ignoreDebugInfo(ignoreDebugInfo) {}
+Ast::Ast(const Bytecode& bytecode, const bool& ignoreDebugInfo, const bool& minimizeDiffs) : bytecode(bytecode), ignoreDebugInfo(ignoreDebugInfo), minimizeDiffs(minimizeDiffs) {}
 
 Ast::~Ast() {
 	for (uint32_t i = statements.size(); i--;) {
@@ -33,7 +33,7 @@ Ast::Expression*& Ast::new_expression(const AST_EXPRESSION& type) {
 
 void Ast::operator()() {
 	print_progress_bar();
-	chunk = new_function(*bytecode.main);
+	chunk = new_function(*bytecode.main, 0);
 	if (bytecode.header.version == Bytecode::BC_VERSION_2) isFR2Enabled = bytecode.header.flags & Bytecode::BC_F_FR2;
 	prototypeDataLeft = bytecode.prototypesTotalSize;
 	uint32_t functionCounter = 0;
@@ -80,7 +80,7 @@ void Ast::build_instructions(Function& function) {
 
 		switch (function.block[i]->instruction.type) {
 		case Bytecode::BC_OP_FNEW:
-			function.block[i]->function = new_function(*function.get_constant(function.block[i]->instruction.d).prototype);
+			function.block[i]->function = new_function(*function.get_constant(function.block[i]->instruction.d).prototype, function.level + 1);
 			function.childFunctions.emplace_back(function.block[i]->function);
 			function.block[i]->function->upvalues.resize(function.block[i]->function->prototype.upvalues.size());
 
@@ -2754,7 +2754,7 @@ void Ast::clean_up(Function& function) {
 		function.parameterNames.resize(function.prototype.header.parameters);
 
 		for (uint32_t i = function.parameterNames.size(); i--;) {
-			function.parameterNames[i] = "arg_" + std::to_string(function.id) + "_" + std::to_string(i);
+			function.parameterNames[i] = "arg_" + std::to_string(minimizeDiffs ? function.level : function.id) + "_" + std::to_string(i);
 			(*function.slotScopeCollector.slotInfos[i].activeSlotScope)->name = function.parameterNames[i];
 		}
 	}
@@ -2764,7 +2764,7 @@ void Ast::clean_up(Function& function) {
 
 	for (uint32_t i = 0, labelCounter = 0; i < function.labels.size(); i++) {
 		if (!function.labels[i].jumpIds.size()) continue;
-		function.labels[i].name = "label_" + std::to_string(function.id) + "_" + std::to_string(labelCounter);
+		function.labels[i].name = "label_" + std::to_string(minimizeDiffs ? function.level : function.id) + "_" + std::to_string(labelCounter);
 		labelCounter++;
 	}
 }
@@ -2797,7 +2797,7 @@ void Ast::clean_up_block(Function& function, std::vector<Statement*>& block, uin
 				}
 			} else {
 				for (uint8_t j = 0; j < block[i]->assignment.variables.size(); j++) {
-					(*block[i]->assignment.variables[j].slotScope)->name = "iter_" + std::to_string(function.id) + "_" + std::to_string(iteratorCounter);
+					(*block[i]->assignment.variables[j].slotScope)->name = "iter_" + std::to_string(minimizeDiffs ? function.level : function.id) + "_" + std::to_string(iteratorCounter);
 					iteratorCounter++;
 				}
 			}
@@ -2970,7 +2970,7 @@ void Ast::clean_up_block(Function& function, std::vector<Statement*>& block, uin
 				}
 
 				declarations.emplace_back(&block[i]->assignment.variables[j]);
-				(*block[i]->assignment.variables[j].slotScope)->name = "var_" + std::to_string(function.id) + "_" + std::to_string(variableCounter);
+				(*block[i]->assignment.variables[j].slotScope)->name = "var_" + std::to_string(minimizeDiffs ? function.level : function.id) + "_" + std::to_string(variableCounter);
 				variableCounter++;
 			}
 
@@ -3437,12 +3437,66 @@ Ast::Expression* Ast::new_table(const Function& function, const uint16_t& index)
 		expression->table->constants.list[i] = new_table_constant(*this, function.get_constant(index).array[i]);
 	}
 
-	expression->table->constants.fields.resize(function.get_constant(index).table.size());
+	if (minimizeDiffs) {
+		uint32_t position;
+		Expression* key;
+		Expression** value;
+		Table::Field falseField, trueField;
+		std::vector<Table::Field> numberFields, stringFields;
 
-	for (uint32_t i = expression->table->constants.fields.size(); i--;) {
-		expression->table->constants.fields[i].key = new_table_constant(*this, function.get_constant(index).table[i].key);
-		if (expression->table->constants.fields[i].key->constant->type == AST_CONSTANT_STRING) check_valid_name(expression->table->constants.fields[i].key->constant);
-		expression->table->constants.fields[i].value = new_table_constant(*this, function.get_constant(index).table[i].value);
+		for (uint32_t i = function.get_constant(index).table.size(); i--;) {
+			key = new_table_constant(*this, function.get_constant(index).table[i].key);
+
+			switch (key->constant->type) {
+			case AST_CONSTANT_FALSE:
+				falseField.key = key;
+				value = &falseField.value;
+				break;
+			case AST_CONSTANT_TRUE:
+				trueField.key = key;
+				value = &trueField.value;
+				break;
+			case AST_CONSTANT_NUMBER:
+				position = numberFields.size();
+
+				while (position && numberFields[position - 1].key->constant->number > key->constant->number) {
+					position--;
+				}
+
+				numberFields.emplace(numberFields.begin() + position, Table::Field{ .key = key });
+				value = &numberFields[position].value;
+				break;
+			case AST_CONSTANT_STRING:
+				check_valid_name(key->constant);
+				position = stringFields.size();
+
+				while (position && stringFields[position - 1].key->constant->string.compare(key->constant->string) > 0) {
+					position--;
+				}
+
+				stringFields.emplace(stringFields.begin() + position, Table::Field{ .key = key });
+				value = &stringFields[position].value;
+				break;
+			default:
+				throw;
+			}
+
+			*value = new_table_constant(*this, function.get_constant(index).table[i].value);
+		}
+
+		if (falseField.key) expression->table->constants.fields.emplace_back(falseField);
+		if (trueField.key) expression->table->constants.fields.emplace_back(trueField);
+		expression->table->constants.fields.reserve(expression->table->constants.fields.size() + numberFields.size() + stringFields.size());
+		expression->table->constants.fields.insert(expression->table->constants.fields.begin() + expression->table->constants.fields.size(), numberFields.begin(), numberFields.begin() + numberFields.size());
+		expression->table->constants.fields.insert(expression->table->constants.fields.begin() + expression->table->constants.fields.size(), stringFields.begin(), stringFields.begin() + stringFields.size());
+	} else {
+		expression->table->constants.fields.resize(function.get_constant(index).table.size());
+
+		for (uint32_t i = expression->table->constants.fields.size(); i--;) {
+			expression->table->constants.fields[i].key = new_table_constant(*this, function.get_constant(index).table[i].key);
+			if (expression->table->constants.fields[i].key->constant->type == AST_CONSTANT_STRING) check_valid_name(expression->table->constants.fields[i].key->constant);
+			expression->table->constants.fields[i].value = new_table_constant(*this, function.get_constant(index).table[i].value);
+		}
 	}
 
 	return expression;

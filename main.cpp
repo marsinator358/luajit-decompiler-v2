@@ -18,6 +18,7 @@ static struct {
 	bool showHelp = false;
 	bool silentAssertions = false;
 	bool ignoreDebugInfo = false;
+	bool minimizeDiffs = false;
 	std::string inputPath;
 	std::string outputPath;
 	std::string extensionFilter;
@@ -60,8 +61,8 @@ static bool decompileFilesRecursively(const Directory& directory) {
 		outputFile += ".lua";
 
 		Bytecode bytecode(arguments.inputPath + directory.path + directory.files[i]);
-		Ast ast(bytecode, arguments.ignoreDebugInfo);
-		Lua lua(bytecode, ast, arguments.outputPath + directory.path + outputFile);
+		Ast ast(bytecode, arguments.ignoreDebugInfo, arguments.minimizeDiffs);
+		Lua lua(bytecode, ast, arguments.outputPath + directory.path + outputFile, arguments.minimizeDiffs);
 
 		try {
 			print("--------------------\nInput file: " + bytecode.filePath + "\nReading bytecode...");
@@ -137,6 +138,8 @@ static char* parseArguments(const int& argc, char** const& argv) {
 				} else if (argument == "ignore_debug_info") {
 					arguments.ignoreDebugInfo = true;
 					continue;
+				} else if (argument == "minimize_diffs") {
+					arguments.minimizeDiffs = true;
 				} else if (argument == "output") {
 					if (i <= argc - 2) {
 						i++;
@@ -160,6 +163,9 @@ static char* parseArguments(const int& argc, char** const& argv) {
 					continue;
 				case 'i':
 					arguments.ignoreDebugInfo = true;
+					continue;
+				case 'm':
+					arguments.minimizeDiffs = true;
 					continue;
 				case 'o':
 					if (i > argc - 2) break;
@@ -206,7 +212,8 @@ int main(int argc, char* argv[]) {
 			"  -o, --output OUTPUT_PATH\tOverride output directory\n"
 			"  -e, --extension EXTENSION\tOnly decompile files with the specific extension\n"
 			"  -s, --silent_assertions\tDisable assertion error pop-up window\n\t\t\t\t  and auto skip files that fail to decompile\n"
-			"  -i, --ignore_debug_info\tIgnore bytecode debug info"
+			"  -i, --ignore_debug_info\tIgnore bytecode debug info\n"
+			"  -m, --minimize_diffs\t\tOptimize output formatting to help minimize diffs"
 		);
 		return EXIT_SUCCESS;
 	} else if (!arguments.inputPath.size()) {

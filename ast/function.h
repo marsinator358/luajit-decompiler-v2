@@ -27,8 +27,8 @@ struct Ast::Function {
 		std::vector<uint32_t> jumpIds;
 	};
 
-	Function(const Bytecode::Prototype& prototype, const uint32_t& id, const bool& ignoreDebugInfo)
-		: prototype(prototype), isVariadic(prototype.header.flags& Bytecode::BC_PROTO_VARARG), hasDebugInfo(!ignoreDebugInfo && prototype.header.hasDebugInfo) {
+	Function(const Bytecode::Prototype& prototype, const uint32_t& level, const bool& ignoreDebugInfo)
+		: prototype(prototype), isVariadic(prototype.header.flags& Bytecode::BC_PROTO_VARARG), level(level), hasDebugInfo(!ignoreDebugInfo && prototype.header.hasDebugInfo) {
 		slotScopeCollector.slotInfos.resize(prototype.header.framesize);
 
 		for (uint8_t i = prototype.header.parameters; i--;) {
@@ -138,6 +138,7 @@ struct Ast::Function {
 
 	const Bytecode::Prototype& prototype;
 	const bool isVariadic, hasDebugInfo;
+	const uint32_t level;
 	uint32_t id = 0;
 	bool assignmentSlotIsUpvalue = false;
 	std::vector<Local> locals;
