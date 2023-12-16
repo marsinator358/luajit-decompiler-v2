@@ -1,6 +1,7 @@
 #include "..\main.h"
 
-Lua::Lua(const Bytecode& bytecode, const Ast& ast, const std::string& filePath, const bool& minimizeDiffs) : bytecode(bytecode), ast(ast), filePath(filePath), minimizeDiffs(minimizeDiffs) {}
+Lua::Lua(const Bytecode& bytecode, const Ast& ast, const std::string& filePath, const bool& minimizeDiffs, const bool& unrestrictedAscii)
+	: bytecode(bytecode), ast(ast), filePath(filePath), minimizeDiffs(minimizeDiffs), unrestrictedAscii(unrestrictedAscii) {}
 
 Lua::~Lua() {
 	close_file();
@@ -20,7 +21,7 @@ void Lua::operator()() {
 }
 
 void Lua::write_header() {
-	write(UTF8_BOM);
+	if (!unrestrictedAscii) write(UTF8_BOM);
 	if (!bytecode.header.chunkname.size()) return;
 	write("-- chunkname: ");
 	write_string(bytecode.header.chunkname);
@@ -841,8 +842,11 @@ void Lua::write_string(const std::string& string) {
 	for (uint32_t i = 0; i < string.size(); i++) {
 		value = string[i];
 
-		if (!(value & 0x80)) {
-			if (string[i] >= ' ' && string[i] <= '~') {
+		if (unrestrictedAscii || !(value & 0x80)) {
+			if ((string[i] >= ' '
+					&& string[i] <= '~')
+				|| (unrestrictedAscii
+					&& string[i] >= 0x80)) {
 				switch (string[i]) {
 				case '"':
 				case '\\':

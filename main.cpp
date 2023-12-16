@@ -19,6 +19,7 @@ static struct {
 	bool silentAssertions = false;
 	bool ignoreDebugInfo = false;
 	bool minimizeDiffs = false;
+	bool unrestrictedAscii = false;
 	std::string inputPath;
 	std::string outputPath;
 	std::string extensionFilter;
@@ -73,7 +74,7 @@ static bool decompileFilesRecursively(const Directory& directory) {
 
 		Bytecode bytecode(arguments.inputPath + directory.path + directory.files[i]);
 		Ast ast(bytecode, arguments.ignoreDebugInfo, arguments.minimizeDiffs);
-		Lua lua(bytecode, ast, arguments.outputPath + directory.path + outputFile, arguments.minimizeDiffs);
+		Lua lua(bytecode, ast, arguments.outputPath + directory.path + outputFile, arguments.minimizeDiffs, arguments.unrestrictedAscii);
 
 		try {
 			print("--------------------\nInput file: " + bytecode.filePath + "\nReading bytecode...");
@@ -162,6 +163,9 @@ static char* parseArguments(const int& argc, char** const& argv) {
 				} else if (argument == "silent_assertions") {
 					arguments.silentAssertions = true;
 					continue;
+				} else if (argument == "unrestricted_ascii") {
+					arguments.unrestrictedAscii = true;
+					continue;
 				}
 			} else if (argument.size() == 2) {
 				switch (argument[1]) {
@@ -187,6 +191,9 @@ static char* parseArguments(const int& argc, char** const& argv) {
 					continue;
 				case 's':
 					arguments.silentAssertions = true;
+					continue;
+				case 'u':
+					arguments.unrestrictedAscii = true;
 					continue;
 				}
 			}
@@ -233,7 +240,8 @@ int main(int argc, char* argv[]) {
 			"  -s, --silent_assertions\tDisable assertion error pop-up window\n"
 			"\t\t\t\t  and auto skip files that fail to decompile\n"
 			"  -i, --ignore_debug_info\tIgnore bytecode debug info\n"
-			"  -m, --minimize_diffs\t\tOptimize output formatting to help minimize diffs"
+			"  -m, --minimize_diffs\t\tOptimize output formatting to help minimize diffs\n"
+			"  -u, --unrestricted_ascii\tDisable UTF-8 encoding and string restrictions"
 		);
 		return EXIT_SUCCESS;
 	}
