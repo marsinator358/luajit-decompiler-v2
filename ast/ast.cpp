@@ -2489,9 +2489,7 @@ void Ast::build_multi_assignment(Function& function, std::vector<Statement*>& bl
 				if (block[i]->type == AST_STATEMENT_ASSIGNMENT) {
 					switch (block[i]->assignment.variables.back().type) {
 					case AST_VARIABLE_SLOT:
-						if (block[i]->assignment.variables.back().type == AST_VARIABLE_SLOT
-							&& !(*block[i]->assignment.variables.back().slotScope)->usages
-							&& !block[i]->assignment.forwardDeclaration) {
+						if (!(*block[i]->assignment.variables.back().slotScope)->usages && !block[i]->assignment.forwardDeclaration) {
 							function.slotScopeCollector.remove_scope(block[i]->assignment.variables.back().slot, block[i]->assignment.variables.back().slotScope);
 							block[i]->assignment.variables.clear();
 						}
@@ -2499,7 +2497,6 @@ void Ast::build_multi_assignment(Function& function, std::vector<Statement*>& bl
 						break;
 					case AST_VARIABLE_TABLE_INDEX:
 						if (index == i
-							&& block[i]->assignment.variables.back().type == AST_VARIABLE_TABLE_INDEX
 							&& (block[i]->assignment.variables.back().table->type != AST_EXPRESSION_VARIABLE
 								|| block[i]->assignment.variables.back().table->variable->type != AST_VARIABLE_SLOT
 								|| (!get_constant_type(block[i]->assignment.variables.back().tableIndex)
@@ -2516,6 +2513,7 @@ void Ast::build_multi_assignment(Function& function, std::vector<Statement*>& bl
 					i--;
 					function.slotScopeCollector.remove_scope(block[i]->assignment.variables.back().slot, block[i]->assignment.variables.back().slotScope);
 					block[i + 1]->assignment.expressions.emplace(block[i + 1]->assignment.expressions.begin(), block[i]->assignment.expressions.back());
+					block.erase(block.begin() + i);
 				}
 
 				break;
@@ -3201,9 +3199,7 @@ bool Ast::is_valid_block(Function& function, const BlockInfo& blockInfo, const u
 }
 
 void Ast::check_valid_name(Constant* const& constant) {
-	static constexpr uint8_t KEYWORDS_COUNT = 21;
-
-	static const std::string KEYWORDS[KEYWORDS_COUNT] = {
+	static const std::string KEYWORDS[] = {
 		"and", "break", "do", "else", "elseif", "end", "false",
 		"for", "function", "if", "in", "local", "nil", "not",
 		"or", "repeat", "return", "then", "true", "until", "while"
@@ -3212,7 +3208,7 @@ void Ast::check_valid_name(Constant* const& constant) {
 	if (!constant->string.size() || constant->string.front() < 'A') return;
 
 	for (uint32_t i = constant->string.size(); i--;) {
-		if (constant->string[i] < '0' || constant->string[i] > 'z') return;
+		if (constant->string[i] < '0') return;
 
 		switch (constant->string[i]) {
 		case ':':
@@ -3227,11 +3223,16 @@ void Ast::check_valid_name(Constant* const& constant) {
 		case ']':
 		case '^':
 		case '`':
+		case '{':
+		case '|':
+		case '}':
+		case '~':
+		case '\x7F':
 			return;
 		}
 	}
 
-	for (uint8_t i = KEYWORDS_COUNT; i--;) {
+	for (uint8_t i = sizeof(KEYWORDS) / sizeof(std::string); i--;) {
 		if (constant->string == KEYWORDS[i]) return;
 	}
 
@@ -3369,6 +3370,8 @@ Ast::Expression* Ast::new_primitive(const uint8_t& primitive) {
 	case 2:
 		expression->constant->type = AST_CONSTANT_TRUE;
 		break;
+	default:
+		throw;
 	}
 
 	return expression;

@@ -1,6 +1,6 @@
 #include "..\main.h"
 
-Lua::Lua(const Bytecode& bytecode, const Ast& ast, const std::string& filePath, const bool& minimizeDiffs) : bytecode(bytecode), ast(ast), filePath(filePath), minimizeDiffs(minimizeDiffs){}
+Lua::Lua(const Bytecode& bytecode, const Ast& ast, const std::string& filePath, const bool& minimizeDiffs) : bytecode(bytecode), ast(ast), filePath(filePath), minimizeDiffs(minimizeDiffs) {}
 
 Lua::~Lua() {
 	close_file();
@@ -877,7 +877,7 @@ void Lua::write_string(const std::string& string) {
 				continue;
 			}
 		} else if ((value & 0xE0) == 0xC0) {
-			if (i <= string.size() - 2) {
+			if (i + 1 < string.size()) {
 				value <<= 8;
 				value |= string[i + 1];
 
@@ -891,7 +891,7 @@ void Lua::write_string(const std::string& string) {
 				}
 			}
 		} else if ((value & 0xF0) == 0xE0) {
-			if (i <= string.size() - 3) {
+			if (i + 2 < string.size()) {
 				value <<= 16;
 				value |= (uint16_t)string[i + 1] << 8;
 				value |= string[i + 2];
@@ -909,7 +909,7 @@ void Lua::write_string(const std::string& string) {
 				}
 			}
 		} else if ((value & 0xF8) == 0xF0) {
-			if (i <= string.size() - 4) {
+			if (i + 3 < string.size()) {
 				value <<= 24;
 				value |= (uint32_t)string[i + 1] << 16;
 				value |= (uint16_t)string[i + 2] << 8;

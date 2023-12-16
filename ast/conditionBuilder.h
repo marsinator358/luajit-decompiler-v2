@@ -92,6 +92,8 @@ struct Ast::ConditionBuilder {
 			return Node::FALSY_TEST;
 		case Bytecode::BC_OP_JMP:
 			return Node::UNCONDITIONAL;
+		default:
+			throw;
 		}
 	}
 
@@ -276,6 +278,8 @@ struct Ast::ConditionBuilder {
 		case Node::NOT_OR:
 			return node->inverted ? build_binary(node->type, build_expression(node->leftNode), build_expression(node->rightNode))
 				: build_not(build_binary(node->type, build_expression(node->leftNode), build_expression(node->rightNode)));
+		default:
+			throw;
 		}
 	}
 
@@ -320,6 +324,8 @@ struct Ast::ConditionBuilder {
 		case Node::NOT_OR:
 			expression->binaryOperation->type = AST_BINARY_OR;
 			break;
+		default:
+			throw;
 		}
 
 		expression->binaryOperation->leftOperand = leftOperand;

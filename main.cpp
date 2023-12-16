@@ -30,6 +30,17 @@ struct Directory {
 	std::vector<std::string> files;
 };
 
+static std::string string_to_lowercase(const std::string& string) {
+	std::string lowercaseString = string;
+
+	for (uint32_t i = lowercaseString.size(); i--;) {
+		if (lowercaseString[i] < 'A' || lowercaseString[i] > 'Z') continue;
+		lowercaseString[i] += 'a' - 'A';
+	}
+
+	return lowercaseString;
+}
+
 static void findFilesRecursively(Directory& directory) {
 	WIN32_FIND_DATAA pathData;
 	HANDLE handle = FindFirstFileA((arguments.inputPath + directory.path + '*').c_str(), &pathData);
@@ -44,7 +55,7 @@ static void findFilesRecursively(Directory& directory) {
 			continue;
 		}
 
-		if (!arguments.extensionFilter.size() || arguments.extensionFilter == PathFindExtensionA(pathData.cFileName)) directory.files.emplace_back(pathData.cFileName);
+		if (!arguments.extensionFilter.size() || arguments.extensionFilter == string_to_lowercase(PathFindExtensionA(pathData.cFileName))) directory.files.emplace_back(pathData.cFileName);
 	} while (FindNextFileA(handle, &pathData));
 
 	FindClose(handle);
@@ -218,7 +229,7 @@ int main(int argc, char* argv[]) {
 			"Available options:\n"
 			"  -h, -?, --help\t\tShow this message\n"
 			"  -o, --output OUTPUT_PATH\tOverride output directory\n"
-			"  -e, --extension EXTENSION\tOnly decompile files with the specific extension\n"
+			"  -e, --extension EXTENSION\tOnly decompile files with the specified extension\n"
 			"  -s, --silent_assertions\tDisable assertion error pop-up window\n"
 			"\t\t\t\t  and auto skip files that fail to decompile\n"
 			"  -i, --ignore_debug_info\tIgnore bytecode debug info\n"
@@ -230,8 +241,7 @@ int main(int argc, char* argv[]) {
 	if (!arguments.inputPath.size()) {
 		print("No input path specified!");
 		if (isCommandLine) return EXIT_FAILURE;
-		print("Please select a valid LuaJIT bytecode file.");
-		arguments.inputPath.resize(1024, NULL);
+		arguments.inputPath.resize(MAX_PATH, NULL);
 		OPENFILENAMEA dialogInfo = {
 			.lStructSize = sizeof(OPENFILENAMEA),
 			.hwndOwner = NULL,
@@ -246,6 +256,7 @@ int main(int argc, char* argv[]) {
 			.lpstrDefExt = NULL,
 			.FlagsEx = NULL
 		};
+		print("Please select a valid LuaJIT bytecode file.");
 		if (!GetOpenFileNameA(&dialogInfo)) return EXIT_FAILURE;
 		arguments.inputPath = arguments.inputPath.c_str();
 	}
@@ -253,9 +264,9 @@ int main(int argc, char* argv[]) {
 	DWORD pathAttributes;
 
 	if (!arguments.outputPath.size()) {
-		arguments.outputPath.resize(1024);
+		arguments.outputPath.resize(MAX_PATH);
 		GetModuleFileNameA(NULL, arguments.outputPath.data(), arguments.outputPath.size());
-		*PathFindFileNameA(arguments.outputPath.c_str()) = '\x00';
+		*PathFindFileNameA(arguments.outputPath.data()) = '\x00';
 		arguments.outputPath = arguments.outputPath.c_str();
 		arguments.outputPath += "output\\";
 		arguments.outputPath.shrink_to_fit();
@@ -282,7 +293,11 @@ int main(int argc, char* argv[]) {
 		}
 	}
 
-	if (arguments.extensionFilter.size() && arguments.extensionFilter.front() != '.') arguments.extensionFilter.insert(arguments.extensionFilter.begin(), '.');
+	if (arguments.extensionFilter.size()) {
+		if (arguments.extensionFilter.front() != '.') arguments.extensionFilter.insert(arguments.extensionFilter.begin(), '.');
+		arguments.extensionFilter = string_to_lowercase(arguments.extensionFilter);
+	}
+
 	pathAttributes = GetFileAttributesA(arguments.inputPath.c_str());
 
 	if (pathAttributes == INVALID_FILE_ATTRIBUTES) {
@@ -306,7 +321,7 @@ int main(int argc, char* argv[]) {
 		findFilesRecursively(root);
 
 		if (!root.files.size() && !root.folders.size()) {
-			print("No files " + (arguments.extensionFilter.size() ? "matching extension " + arguments.extensionFilter + " " : "") + "found in path: " + arguments.inputPath);
+			print("No files " + (arguments.extensionFilter.size() ? "with extension " + arguments.extensionFilter + " " : "") + "found in path: " + arguments.inputPath);
 			wait_for_exit();
 			return EXIT_FAILURE;
 		}
@@ -342,7 +357,7 @@ std::string input() {
 
 	FlushConsoleInputBuffer(CONSOLE_INPUT);
 	DWORD charsRead;
-	return ReadConsoleA(CONSOLE_INPUT, BUFFER, 1024, &charsRead, NULL) && charsRead > 2 ? std::string(BUFFER, charsRead - 2) : "";
+	return ReadConsoleA(CONSOLE_INPUT, BUFFER, sizeof(BUFFER), &charsRead, NULL) && charsRead > 2 ? std::string(BUFFER, charsRead - 2) : "";
 }
 
 void print_progress_bar(const double& progress, const double& total) {
@@ -354,18 +369,26 @@ void print_progress_bar(const double& progress, const double& total) {
 		PROGRESS_BAR[i + 2] = i < threshold ? '=' : ' ';
 	}
 
-	WriteConsoleA(CONSOLE_OUTPUT, PROGRESS_BAR, 23, NULL, NULL);
+	WriteConsoleA(CONSOLE_OUTPUT, PROGRESS_BAR, sizeof(PROGRESS_BAR) - 1, NULL, NULL);
 	isProgressBarActive = true;
 }
 
 void erase_progress_bar() {
+	static constexpr char PROGRESS_BAR_ERASER[] = "\r                      \r";
+
 	if (!isProgressBarActive) return;
-	WriteConsoleA(CONSOLE_OUTPUT, "\r                      \r", 24, NULL, NULL);
+	WriteConsoleA(CONSOLE_OUTPUT, PROGRESS_BAR_ERASER, sizeof(PROGRESS_BAR_ERASER) - 1, NULL, NULL);
 	isProgressBarActive = false;
 }
 
 void assert(const bool& assertion, const std::string& message, const std::string& filePath, const std::string& function, const std::string& source, const uint32_t& line) {
-	if (!assertion) throw Assertion{ .message = message, .filePath = filePath, .function = function, .source = source, .line = std::to_string(line)};
+	if (!assertion) throw Assertion{
+		.message = message,
+		.filePath = filePath,
+		.function = function,
+		.source = source,
+		.line = std::to_string(line)
+	};
 }
 
 std::string byte_to_string(const uint8_t& byte) {
