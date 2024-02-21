@@ -43,7 +43,7 @@ private:
 		std::vector<Statement*>& block;
 		BlockInfo* const previousBlock;
 	};
-	
+
 	Function*& new_function(const Bytecode::Prototype& prototype, const uint32_t& level);
 	Statement*& new_statement(const AST_STATEMENT& type);
 	Expression*& new_expression(const AST_EXPRESSION& type);

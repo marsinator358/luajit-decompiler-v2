@@ -20,6 +20,7 @@ static struct {
 	bool ignoreDebugInfo = false;
 	bool minimizeDiffs = false;
 	bool unrestrictedAscii = false;
+	bool autoOverwrite = false;
 	std::string inputPath;
 	std::string outputPath;
 	std::string extensionFilter;
@@ -74,7 +75,7 @@ static bool decompileFilesRecursively(const Directory& directory) {
 
 		Bytecode bytecode(arguments.inputPath + directory.path + directory.files[i]);
 		Ast ast(bytecode, arguments.ignoreDebugInfo, arguments.minimizeDiffs);
-		Lua lua(bytecode, ast, arguments.outputPath + directory.path + outputFile, arguments.minimizeDiffs, arguments.unrestrictedAscii);
+		Lua lua(bytecode, ast, arguments.outputPath + directory.path + outputFile, arguments.minimizeDiffs, arguments.unrestrictedAscii, arguments.autoOverwrite);
 
 		try {
 			print("--------------------\nInput file: " + bytecode.filePath + "\nReading bytecode...");
@@ -140,7 +141,9 @@ static char* parseArguments(const int& argc, char** const& argv) {
 			if (argument[1] == '-') {
 				argument = argument.c_str() + 2;
 
-				if (argument == "extension") {
+				if (argument == "auto_overwrite") {
+					arguments.autoOverwrite = true;
+				} else if (argument == "extension") {
 					if (i <= argc - 2) {
 						i++;
 						arguments.extensionFilter = argv[i];
@@ -169,6 +172,9 @@ static char* parseArguments(const int& argc, char** const& argv) {
 				}
 			} else if (argument.size() == 2) {
 				switch (argument[1]) {
+				case 'a':
+					arguments.autoOverwrite = true;
+					continue;
 				case 'e':
 					if (i > argc - 2) break;
 					i++;
@@ -234,6 +240,7 @@ int main(int argc, char* argv[]) {
 			"Usage: luajit-decompiler-v2.exe INPUT_PATH [options]\n"
 			"\n"
 			"Available options:\n"
+			"  -a, --auto_overwrite\t\tAutomatically overwrite files\n"
 			"  -h, -?, --help\t\tShow this message\n"
 			"  -o, --output OUTPUT_PATH\tOverride output directory\n"
 			"  -e, --extension EXTENSION\tOnly decompile files with the specified extension\n"

@@ -1,7 +1,7 @@
 #include "..\main.h"
 
-Lua::Lua(const Bytecode& bytecode, const Ast& ast, const std::string& filePath, const bool& minimizeDiffs, const bool& unrestrictedAscii)
-	: bytecode(bytecode), ast(ast), filePath(filePath), minimizeDiffs(minimizeDiffs), unrestrictedAscii(unrestrictedAscii) {}
+Lua::Lua(const Bytecode& bytecode, const Ast& ast, const std::string& filePath, const bool& minimizeDiffs, const bool& unrestrictedAscii, const bool& autoOverwrite)
+	: bytecode(bytecode), ast(ast), filePath(filePath), minimizeDiffs(minimizeDiffs), unrestrictedAscii(unrestrictedAscii), autoOverwrite(autoOverwrite) {}
 
 Lua::~Lua() {
 	close_file();
@@ -991,12 +991,14 @@ void Lua::write_indent() {
 
 void Lua::create_file() {
 #ifndef _DEBUG
-	file = CreateFileA(filePath.c_str(), GENERIC_READ, NULL, NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
+	if (!autoOverwrite) {
+		file = CreateFileA(filePath.c_str(), GENERIC_READ, NULL, NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
 
-	if (file != INVALID_HANDLE_VALUE) {
-		close_file();
-		assert(MessageBoxA(NULL, ("File " + filePath + " already exists.\n\nDo you want to overwrite it?").c_str(), PROGRAM_NAME, MB_ICONWARNING | MB_YESNO | MB_DEFBUTTON2) == IDYES,
-			"File already exists", filePath, DEBUG_INFO);
+		if (file != INVALID_HANDLE_VALUE) {
+			close_file();
+			assert(MessageBoxA(NULL, ("File " + filePath + " already exists.\n\nDo you want to overwrite it?").c_str(), PROGRAM_NAME, MB_ICONWARNING | MB_YESNO | MB_DEFBUTTON2) == IDYES,
+				"File already exists", filePath, DEBUG_INFO);
+		}
 	}
 #endif
 
