@@ -43,7 +43,7 @@ private:
 		std::vector<Statement*>& block;
 		BlockInfo* const previousBlock;
 	};
-	
+
 	Function*& new_function(const Bytecode::Prototype& prototype, const uint32_t& level);
 	Statement*& new_statement(const AST_STATEMENT& type);
 	Expression*& new_expression(const AST_EXPRESSION& type);
@@ -54,7 +54,7 @@ private:
 	void build_loops(Function& function);
 	void build_local_scopes(Function& function, std::vector<Statement*>& block);
 	void build_expressions(Function& function, std::vector<Statement*>& block);
-	void collect_slot_scopes(Function& function, std::vector<Statement*>& block, BlockInfo* const& previousBlock);
+	void build_slot_scopes(Function& function, std::vector<Statement*>& block, BlockInfo* const& previousBlock);
 	void eliminate_slots(Function& function, std::vector<Statement*>& block, BlockInfo* const& previousBlock);
 	void eliminate_conditions(Function& function, std::vector<Statement*>& block, BlockInfo* const& previousBlock);
 	void build_multi_assignment(Function& function, std::vector<Statement*>& block);

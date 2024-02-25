@@ -1,7 +1,7 @@
 #include "..\main.h"
 
-Lua::Lua(const Bytecode& bytecode, const Ast& ast, const std::string& filePath, const bool& minimizeDiffs, const bool& unrestrictedAscii)
-	: bytecode(bytecode), ast(ast), filePath(filePath), minimizeDiffs(minimizeDiffs), unrestrictedAscii(unrestrictedAscii) {}
+Lua::Lua(const Bytecode& bytecode, const Ast& ast, const std::string& filePath, const bool& forceOverwrite, const bool& minimizeDiffs, const bool& unrestrictedAscii)
+	: bytecode(bytecode), ast(ast), filePath(filePath), forceOverwrite(forceOverwrite), minimizeDiffs(minimizeDiffs), unrestrictedAscii(unrestrictedAscii) {}
 
 Lua::~Lua() {
 	close_file();
@@ -11,7 +11,7 @@ void Lua::operator()() {
 	print_progress_bar();
 	prototypeDataLeft = bytecode.prototypesTotalSize;
 	write_header();
-	write_block(*ast.chunk, ast.chunk->block);
+	if (ast.chunk->block.size()) write_block(*ast.chunk, ast.chunk->block);
 	prototypeDataLeft -= ast.chunk->prototype.prototypeSize;
 	print_progress_bar(bytecode.prototypesTotalSize - prototypeDataLeft, bytecode.prototypesTotalSize);
 	create_file();
@@ -312,6 +312,8 @@ void Lua::write_block(const Ast::Function& function, const std::vector<Ast::Stat
 			write_indent();
 			write("::", function.labels[block[i]->instruction.label].name, "::");
 			break;
+		default:
+			throw;
 		}
 
 		write(NEW_LINE);
@@ -886,7 +888,7 @@ void Lua::write_string(const std::string& string) {
 				value |= string[i + 1];
 
 				if ((value & 0xC0) == 0x80
-					&& value >= 0xC280
+					&& value >= 0xC2A0
 					&& value <= 0xDFBF) {
 					writeBuffer += string[i];
 					writeBuffer += string[i + 1];
@@ -991,15 +993,16 @@ void Lua::write_indent() {
 
 void Lua::create_file() {
 #ifndef _DEBUG
-	file = CreateFileA(filePath.c_str(), GENERIC_READ, NULL, NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
+	if (!forceOverwrite) {
+		file = CreateFileA(filePath.c_str(), GENERIC_READ, NULL, NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
 
-	if (file != INVALID_HANDLE_VALUE) {
-		close_file();
-		assert(MessageBoxA(NULL, ("File " + filePath + " already exists.\n\nDo you want to overwrite it?").c_str(), PROGRAM_NAME, MB_ICONWARNING | MB_YESNO | MB_DEFBUTTON2) == IDYES,
-			"File already exists", filePath, DEBUG_INFO);
+		if (file != INVALID_HANDLE_VALUE) {
+			close_file();
+			assert(MessageBoxA(NULL, ("File " + filePath + " already exists.\n\nDo you want to overwrite it?").c_str(), PROGRAM_NAME, MB_ICONWARNING | MB_YESNO | MB_DEFBUTTON2) == IDYES,
+				"File already exists", filePath, DEBUG_INFO);
+		}
 	}
 #endif
-
 	file = CreateFileA(filePath.c_str(), GENERIC_WRITE, NULL, NULL, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL | FILE_FLAG_SEQUENTIAL_SCAN, NULL);
 	assert(file != INVALID_HANDLE_VALUE, "Unable to create file", filePath, DEBUG_INFO);
 }

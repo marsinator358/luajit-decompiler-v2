@@ -242,13 +242,11 @@ struct Ast::Statement {
 
 	struct {
 		void register_slots(Expression*& expression) {
-			usedSlots.emplace_back(expression->variable->slot);
 			openSlots.emplace_back(&expression);
 		}
 
 		template <typename... Expressions>
 		void register_slots(Expression*& expression, Expressions*&... expressions) {
-			usedSlots.emplace_back(expression->variable->slot);
 			openSlots.emplace_back(&expression);
 			return register_slots(expressions...);
 		}
@@ -259,7 +257,6 @@ struct Ast::Statement {
 		CONSTANT_TYPE allowedConstantType = NUMBER_CONSTANT;
 		std::vector<Variable> variables;
 		std::vector<Expression*> expressions;
-		std::vector<uint8_t> usedSlots;
 		std::vector<Expression**> openSlots;
 		Expression* multresReturn = nullptr;
 	} assignment;

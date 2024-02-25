@@ -1,7 +1,7 @@
 class Lua {
 public:
 
-	Lua(const Bytecode& bytecode, const Ast& ast, const std::string& filePath, const bool& minimizeDiffs, const bool& unrestrictedAscii);
+	Lua(const Bytecode& bytecode, const Ast& ast, const std::string& filePath, const bool& forceOverwrite, const bool& minimizeDiffs, const bool& unrestrictedAscii);
 	~Lua();
 
 	void operator()();
@@ -35,6 +35,7 @@ private:
 
 	const Bytecode& bytecode;
 	const Ast& ast;
+	const bool forceOverwrite;
 	const bool minimizeDiffs;
 	const bool unrestrictedAscii;
 	HANDLE file = INVALID_HANDLE_VALUE;

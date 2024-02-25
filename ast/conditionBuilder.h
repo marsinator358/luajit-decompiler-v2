@@ -28,6 +28,28 @@ struct Ast::ConditionBuilder {
 			FALSE_TARGET,
 		} type;
 
+		static constexpr uint8_t TYPE_PREFERENCE[TYPE::END_TARGET][2] = {
+			{ 3, 1 },
+			{ 3, 1 },
+			{ 3, 1 },
+			{ 3, 1 },
+			{ 1, 3 },
+			{ 1, 3 },
+			{ 1, 3 },
+			{ 1, 3 },
+			{ 3, 3 },
+			{ 3, 3 },
+			{ 3, 2 },
+			{ 2, 3 },
+			{ 3, 3 },
+			{ 3, 0 },
+			{ 3, 0 },
+			{ 0, 3 },
+			{ 0, 3 }
+		};
+
+		Node(const TYPE& type) : type(type) {}
+
 		uint32_t nodeLabel = INVALID_ID;
 		uint32_t targetLabel = INVALID_ID;
 		Node* targetNode = nullptr;
@@ -40,16 +62,13 @@ struct Ast::ConditionBuilder {
 
 	ConditionBuilder(const TYPE& type, Ast& ast, const uint32_t& endTargetLabel, const uint32_t& trueTargetLabel, const uint32_t& falseTargetLabel) : ast(ast), type(type) {
 		if (type == ASSIGNMENT) {
-			endTarget = new_node();
-			endTarget->type = Node::END_TARGET;
+			endTarget = new_node(Node::END_TARGET);
 			endTarget->nodeLabel = endTargetLabel;
 		}
 
-		trueTarget = new_node();
-		trueTarget->type = Node::TRUE_TARGET;
+		trueTarget = new_node(Node::TRUE_TARGET);
 		trueTarget->nodeLabel = trueTargetLabel;
-		falseTarget = new_node();
-		falseTarget->type = Node::FALSE_TARGET;
+		falseTarget = new_node(Node::FALSE_TARGET);
 		falseTarget->nodeLabel = falseTargetLabel;
 	}
 
@@ -59,12 +78,11 @@ struct Ast::ConditionBuilder {
 		}
 	}
 
-	Node*& new_node() {
-		nodes.emplace_back(new Node);
-		return nodes.back();
+	Node*& new_node(const Node::TYPE& type) {
+		return nodes.emplace_back(new Node(type));
 	}
 
-	Node::TYPE get_node_type(const Bytecode::BC_OP& instruction, const bool& swapped) {
+	static Node::TYPE get_node_type(const Bytecode::BC_OP& instruction, const bool& swapped) {
 		switch (instruction) {
 		case Bytecode::BC_OP_ISLT:
 			return swapped ? Node::GREATER_THEN : Node::LESS_THAN;
@@ -98,8 +116,7 @@ struct Ast::ConditionBuilder {
 	}
 
 	void add_node(const Node::TYPE& type, const uint32_t& nodeLabel, const uint32_t& targetLabel, std::vector<Expression*>* const& expressions) {
-		conditionNodes.emplace_back(new_node());
-		conditionNodes.back()->type = type;
+		conditionNodes.emplace_back(new_node(type));
 		conditionNodes.back()->nodeLabel = nodeLabel;
 		conditionNodes.back()->targetLabel = targetLabel;
 		conditionNodes.back()->expressions = expressions;
@@ -161,17 +178,14 @@ struct Ast::ConditionBuilder {
 				if (conditionNodes[i]->targetNode->type == Node::FALSE_TARGET) conditionNodes[i]->inverted = true;
 			}
 
-			if (!conditionNodes[conditionNodes.size() - 2]->inverted) {
-				conditionNodes[conditionNodes.size() - 2]->leftNode = copy_node(conditionNodes[conditionNodes.size() - 2]);
-				conditionNodes[conditionNodes.size() - 2]->rightNode = new_node();
-				conditionNodes[conditionNodes.size() - 2]->rightNode->type = Node::UNCONDITIONAL;
-				trueTarget->incomingNodes--;
-				conditionNodes[conditionNodes.size() - 2]->targetNode = falseTarget;
-				falseTarget->incomingNodes++;
-				conditionNodes[conditionNodes.size() - 2]->type = Node::NOT_OR;
-				conditionNodes[conditionNodes.size() - 2]->inverted = true;
-			}
-
+			if (conditionNodes[conditionNodes.size() - 2]->inverted) break;
+			conditionNodes[conditionNodes.size() - 2]->leftNode = copy_node(conditionNodes[conditionNodes.size() - 2]);
+			conditionNodes[conditionNodes.size() - 2]->rightNode = new_node(Node::UNCONDITIONAL);
+			conditionNodes[conditionNodes.size() - 2]->targetNode->incomingNodes--;
+			conditionNodes[conditionNodes.size() - 2]->targetNode = falseTarget;
+			conditionNodes[conditionNodes.size() - 2]->targetNode->incomingNodes++;
+			conditionNodes[conditionNodes.size() - 2]->type = Node::NOT_OR;
+			conditionNodes[conditionNodes.size() - 2]->inverted = true;
 			break;
 		}
 	}
@@ -179,25 +193,25 @@ struct Ast::ConditionBuilder {
 	bool build_boolean_logic() {
 		for (uint32_t i = conditionNodes.size() - 1; --i;) {
 			if (conditionNodes[i - 1]->targetNode == conditionNodes[i] && conditionNodes[i]->incomingNodes == 1) {
-				//TODO
-				conditionNodes[i - 1]->inverted = false;
+				if (Node::TYPE_PREFERENCE[conditionNodes[i - 1]->type][conditionNodes[i - 1]->inverted] != 3) invert_node(conditionNodes[i - 1]);
 				conditionNodes[i - 1]->leftNode = copy_node(conditionNodes[i - 1]);
-				conditionNodes[i - 1]->rightNode = new_node();
-				conditionNodes[i - 1]->rightNode->type = Node::UNCONDITIONAL;
-				conditionNodes[i - 1]->type = Node::OR;
+				conditionNodes[i - 1]->rightNode = new_node(Node::UNCONDITIONAL);
+				conditionNodes[i - 1]->rightNode->inverted = conditionNodes[i - 1]->inverted;
+				conditionNodes[i - 1]->type = conditionNodes[i - 1]->inverted ? Node::AND : Node::OR;
 				merge_nodes(conditionNodes[i - 1], conditionNodes[i]);
-				conditionNodes[i - 1]->type = conditionNodes[i - 1]->inverted ? Node::NOT_AND : Node::AND;
+				conditionNodes[i - 1]->type = conditionNodes[i - 1]->leftNode->inverted ? (conditionNodes[i - 1]->inverted ? Node::NOT_OR : Node::OR) : (conditionNodes[i - 1]->inverted ? Node::NOT_AND : Node::AND);
+				conditionNodes[i - 1]->leftNode->inverted = false;
 				conditionNodes.erase(conditionNodes.begin() + i);
 				i = conditionNodes.size() - 1;
 			} else if (!conditionNodes[i]->incomingNodes) {
 				if (conditionNodes[i - 1]->targetNode == conditionNodes[i]->targetNode) {
-					if (conditionNodes[i - 1]->inverted != conditionNodes[i]->inverted && !invert_node(conditionNodes[i - 1], conditionNodes[i])) return false;
+					if (conditionNodes[i - 1]->inverted != conditionNodes[i]->inverted && !invert_any_node(conditionNodes[i - 1], conditionNodes[i])) return false;
 					merge_nodes(conditionNodes[i - 1], conditionNodes[i]);
 					conditionNodes[i - 1]->type = conditionNodes[i - 1]->inverted ? Node::NOT_AND : Node::OR;
 					conditionNodes.erase(conditionNodes.begin() + i);
 					i = conditionNodes.size() - 1;
 				} else if (conditionNodes[i - 1]->targetNode == conditionNodes[i + 1]) {
-					if (conditionNodes[i - 1]->inverted == conditionNodes[i]->inverted && !invert_node(conditionNodes[i - 1], conditionNodes[i])) return false;
+					if (conditionNodes[i - 1]->inverted == conditionNodes[i]->inverted && !invert_any_node(conditionNodes[i - 1], conditionNodes[i])) return false;
 					merge_nodes(conditionNodes[i - 1], conditionNodes[i]);
 					conditionNodes[i - 1]->type = conditionNodes[i - 1]->inverted ? Node::NOT_OR : Node::AND;
 					conditionNodes.erase(conditionNodes.begin() + i);
@@ -210,29 +224,27 @@ struct Ast::ConditionBuilder {
 		return conditionNodes.size() == 1;
 	}
 
-	bool invert_node(Node* const& leftNode, Node* const& rightNode) {
+	static bool invert_any_node(Node* const& leftNode, Node* const& rightNode) {
 		if (leftNode->targetNode->type < Node::END_TARGET) {
-			if (rightNode->targetNode->type > Node::END_TARGET) {
-				leftNode->inverted = !leftNode->inverted;
-			} else {
-				//TODO
-				if (rightNode->inverted) {
-					rightNode->inverted = false;
-				} else {
-					leftNode->inverted = !leftNode->inverted;
-				}
-			}
+			invert_node(rightNode->targetNode->type > Node::END_TARGET || Node::TYPE_PREFERENCE[leftNode->type][!leftNode->inverted] >= Node::TYPE_PREFERENCE[rightNode->type][!rightNode->inverted] ? leftNode : rightNode);
 		} else {
 			if (rightNode->targetNode->type > Node::END_TARGET) return false;
-			rightNode->inverted = !rightNode->inverted;
+			invert_node(rightNode);
 		}
 
 		return true;
 	}
 
+	static void invert_node(Node* const& node) {
+		node->inverted = !node->inverted;
+		if (Node::TYPE_PREFERENCE[node->type][node->inverted]) return;
+		invert_node(node->leftNode);
+		invert_node(node->rightNode);
+		node->type = node->inverted ? (node->type == Node::AND ? Node::NOT_OR : Node::NOT_AND) : (node->type == Node::NOT_AND ? Node::OR : Node::AND);
+	}
+
 	Node* copy_node(Node* const& node) {
-		Node* const copy = new_node();
-		copy->type = node->type;
+		Node* const copy = new_node(node->type);
 		copy->inverted = node->inverted;
 		copy->expressions = node->expressions;
 		copy->leftNode = node->leftNode;
@@ -240,12 +252,12 @@ struct Ast::ConditionBuilder {
 		return copy;
 	}
 
-	void merge_nodes(Node* const& leftNode, Node* const& rightNode) {
-		leftNode->leftNode = copy_node(leftNode);
-		leftNode->rightNode = rightNode;
-		leftNode->targetNode->incomingNodes--;
-		leftNode->targetNode = rightNode->targetNode;
-		leftNode->inverted = rightNode->inverted;
+	void merge_nodes(Node* const& node, Node* const& targetNode) {
+		node->leftNode = copy_node(node);
+		node->rightNode = targetNode;
+		node->targetNode->incomingNodes--;
+		node->targetNode = targetNode->targetNode;
+		node->inverted = targetNode->inverted;
 	}
 
 	Expression* build_expression(Node* const& node) {

@@ -177,8 +177,7 @@ struct Ast::Function {
 		};
 
 		SlotScope** new_slot_scope() {
-			slotScopes.emplace_back(new SlotScope);
-			return &slotScopes.back()->slotScope;
+			return &slotScopes.emplace_back(new SlotScope)->slotScope;
 		}
 
 		uint32_t add_upvalue_info(const uint32_t& id, const UpvalueInfo::TYPE& type) {

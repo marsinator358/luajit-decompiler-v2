@@ -17,6 +17,7 @@ static uint32_t filesSkipped = 0;
 static struct {
 	bool showHelp = false;
 	bool silentAssertions = false;
+	bool forceOverwrite = false;
 	bool ignoreDebugInfo = false;
 	bool minimizeDiffs = false;
 	bool unrestrictedAscii = false;
@@ -42,7 +43,7 @@ static std::string string_to_lowercase(const std::string& string) {
 	return lowercaseString;
 }
 
-static void findFilesRecursively(Directory& directory) {
+static void find_files_recursively(Directory& directory) {
 	WIN32_FIND_DATAA pathData;
 	HANDLE handle = FindFirstFileA((arguments.inputPath + directory.path + '*').c_str(), &pathData);
 	if (handle == INVALID_HANDLE_VALUE) return;
@@ -51,7 +52,7 @@ static void findFilesRecursively(Directory& directory) {
 		if (pathData.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) {
 			if (!std::strcmp(pathData.cFileName, ".") || !std::strcmp(pathData.cFileName, "..")) continue;
 			directory.folders.emplace_back(Directory{ .path = directory.path + pathData.cFileName + "\\" });
-			findFilesRecursively(directory.folders.back());
+			find_files_recursively(directory.folders.back());
 			if (!directory.folders.back().files.size() && !directory.folders.back().folders.size()) directory.folders.pop_back();
 			continue;
 		}
@@ -62,7 +63,7 @@ static void findFilesRecursively(Directory& directory) {
 	FindClose(handle);
 }
 
-static bool decompileFilesRecursively(const Directory& directory) {
+static bool decompile_files_recursively(const Directory& directory) {
 	CreateDirectoryA((arguments.outputPath + directory.path).c_str(), NULL);
 	std::string outputFile;
 
@@ -74,7 +75,7 @@ static bool decompileFilesRecursively(const Directory& directory) {
 
 		Bytecode bytecode(arguments.inputPath + directory.path + directory.files[i]);
 		Ast ast(bytecode, arguments.ignoreDebugInfo, arguments.minimizeDiffs);
-		Lua lua(bytecode, ast, arguments.outputPath + directory.path + outputFile, arguments.minimizeDiffs, arguments.unrestrictedAscii);
+		Lua lua(bytecode, ast, arguments.outputPath + directory.path + outputFile, arguments.forceOverwrite, arguments.minimizeDiffs, arguments.unrestrictedAscii);
 
 		try {
 			print("--------------------\nInput file: " + bytecode.filePath + "\nReading bytecode...");
@@ -112,13 +113,13 @@ static bool decompileFilesRecursively(const Directory& directory) {
 	}
 
 	for (uint32_t i = 0; i < directory.folders.size(); i++) {
-		if (!decompileFilesRecursively(directory.folders[i])) return false;
+		if (!decompile_files_recursively(directory.folders[i])) return false;
 	}
 
 	return true;
 }
 
-static char* parseArguments(const int& argc, char** const& argv) {
+static char* parse_arguments(const int& argc, char** const& argv) {
 	if (argc < 2) return nullptr;
 	arguments.inputPath = argv[1];
 #ifndef _DEBUG
@@ -146,6 +147,9 @@ static char* parseArguments(const int& argc, char** const& argv) {
 						arguments.extensionFilter = argv[i];
 						continue;
 					}
+				} else if (argument == "force_overwrite") {
+					arguments.forceOverwrite = true;
+					continue;
 				} else if (argument == "help") {
 					arguments.showHelp = true;
 					continue;
@@ -173,6 +177,9 @@ static char* parseArguments(const int& argc, char** const& argv) {
 					if (i > argc - 2) break;
 					i++;
 					arguments.extensionFilter = argv[i];
+					continue;
+				case 'f':
+					arguments.forceOverwrite = true;
 					continue;
 				case '?':
 				case 'h':
@@ -224,8 +231,8 @@ int main(int argc, char* argv[]) {
 #endif
 	}
 	
-	if (parseArguments(argc, argv)) {
-		print("Invalid argument: " + std::string(parseArguments(argc, argv)) + "\nUse -? to show usage and options.");
+	if (parse_arguments(argc, argv)) {
+		print("Invalid argument: " + std::string(parse_arguments(argc, argv)) + "\nUse -? to show usage and options.");
 		return EXIT_FAILURE;
 	}
 	
@@ -235,13 +242,14 @@ int main(int argc, char* argv[]) {
 			"\n"
 			"Available options:\n"
 			"  -h, -?, --help\t\tShow this message\n"
-			"  -o, --output OUTPUT_PATH\tOverride output directory\n"
+			"  -o, --output OUTPUT_PATH\tOverride default output directory\n"
 			"  -e, --extension EXTENSION\tOnly decompile files with the specified extension\n"
 			"  -s, --silent_assertions\tDisable assertion error pop-up window\n"
 			"\t\t\t\t  and auto skip files that fail to decompile\n"
+			"  -f, --force_overwrite\t\tAlways overwrite existing files\n"
 			"  -i, --ignore_debug_info\tIgnore bytecode debug info\n"
 			"  -m, --minimize_diffs\t\tOptimize output formatting to help minimize diffs\n"
-			"  -u, --unrestricted_ascii\tDisable UTF-8 encoding and string restrictions"
+			"  -u, --unrestricted_ascii\tDisable default UTF-8 encoding and string restrictions"
 		);
 		return EXIT_SUCCESS;
 	}
@@ -326,7 +334,7 @@ int main(int argc, char* argv[]) {
 			break;
 		}
 
-		findFilesRecursively(root);
+		find_files_recursively(root);
 
 		if (!root.files.size() && !root.folders.size()) {
 			print("No files " + (arguments.extensionFilter.size() ? "with extension " + arguments.extensionFilter + " " : "") + "found in path: " + arguments.inputPath);
@@ -340,7 +348,7 @@ int main(int argc, char* argv[]) {
 	}
 
 	try {
-		if (!decompileFilesRecursively(root)) {
+		if (!decompile_files_recursively(root)) {
 			print("--------------------\nAborted!");
 			wait_for_exit();
 			return EXIT_FAILURE;
