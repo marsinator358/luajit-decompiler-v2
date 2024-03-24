@@ -9,7 +9,7 @@ void Bytecode::Prototype::operator()(std::vector<Prototype*>& unlinkedPrototypes
 	read_constants(unlinkedPrototypes);
 	read_number_constants();
 	read_debug_info();
-	assert(bufferPosition == bytecode.fileBuffer.size(), "Prototype has unread bytes left", bytecode.filePath, DEBUG_INFO);
+	assert(prototypeSize == bytecode.fileBuffer.size(), "Prototype has unread bytes left", bytecode.filePath, DEBUG_INFO);
 	unlinkedPrototypes.emplace_back(this);
 }
 
@@ -127,7 +127,7 @@ void Bytecode::Prototype::read_constants(std::vector<Prototype*>& unlinkedProtot
 
 void Bytecode::Prototype::read_number_constants() {
 	for (uint32_t i = 0; i < numberConstants.size(); i++) {
-		if (bytecode.fileBuffer[bufferPosition] & 0x01) {
+		if (bytecode.fileBuffer[prototypeSize] & 0x01) {
 			numberConstants[i].type = BC_KNUM_NUM;
 			numberConstants[i].number = get_uleb128_33();
 			numberConstants[i].number |= (uint64_t)get_uleb128() << 32;
@@ -197,8 +197,8 @@ void Bytecode::Prototype::read_debug_info() {
 }
 
 uint8_t Bytecode::Prototype::get_next_byte() {
-	assert(bufferPosition < bytecode.fileBuffer.size(), "Prototype read would exceed end of buffer", bytecode.filePath, DEBUG_INFO);
-	return bytecode.fileBuffer[bufferPosition++];
+	assert(prototypeSize < bytecode.fileBuffer.size(), "Prototype read would exceed end of buffer", bytecode.filePath, DEBUG_INFO);
+	return bytecode.fileBuffer[prototypeSize++];
 }
 
 uint32_t Bytecode::Prototype::get_uleb128() {

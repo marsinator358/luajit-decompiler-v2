@@ -220,6 +220,7 @@ static void wait_for_exit() {
 
 int main(int argc, char* argv[]) {
 	print(std::string(PROGRAM_NAME) + "\nCompiled on " + __DATE__);
+	SetThreadDpiAwarenessContext(DPI_AWARENESS_CONTEXT_SYSTEM_AWARE);
 
 	{
 		DWORD consoleProcessId;

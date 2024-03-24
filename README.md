@@ -17,7 +17,7 @@ Feel free to [report any issues](https://github.com/marsinator358/luajit-decompi
 ## TODO
 
 * bytecode big endian support
-* improved decompilation logic for conditional assignments and if statements
+* improved decompilation logic for conditional assignments
 
 ---
 

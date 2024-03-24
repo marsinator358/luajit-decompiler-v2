@@ -172,6 +172,7 @@ void Ast::assign_debug_info(Function& function) {
 					function.locals.back().scopeEnd = function.prototype.variableInfos[i].scopeEnd;
 					function.locals.back().excludeBlock = function.locals[function.locals.size() - 2].scopeBegin
 						== function.locals[function.locals.size() - 2].scopeEnd ? function.locals[function.locals.size() - 2].excludeBlock : true;
+					function.add_jump(function.locals.back().scopeBegin, function.locals.back().scopeEnd + 1);
 				}
 			}
 		}
@@ -183,6 +184,7 @@ void Ast::assign_debug_info(Function& function) {
 			function.locals.back().baseSlot = activeLocalScopes.size();
 			function.locals.back().scopeBegin = function.prototype.variableInfos[i].scopeBegin;
 			function.locals.back().scopeEnd = function.prototype.variableInfos[i].scopeEnd;
+			function.add_jump(function.locals.back().scopeBegin, function.locals.back().scopeEnd + 1);
 		}
 
 		function.locals.back().names.emplace_back(function.prototype.variableInfos[i].name);
@@ -266,6 +268,10 @@ void Ast::group_jumps(Function& function) {
 			function.block.erase(function.block.begin() + i);
 			continue;
 		}
+	}
+
+	for (uint32_t i = function.locals.size(); i--;) {
+		function.remove_jump(function.locals[i].scopeBegin, function.locals[i].scopeEnd + 1);
 	}
 
 	for (uint32_t i = function.block.size(); i--;) {
@@ -2422,6 +2428,30 @@ void Ast::eliminate_conditions(Function& function, std::vector<Statement*>& bloc
 				i = index;
 			}
 
+			if (i
+				&& block[i]->instruction.type == Bytecode::BC_OP_JMP
+				&& block[i]->assignment.expressions.back()->type == AST_EXPRESSION_CONSTANT
+				&& block[i]->assignment.expressions.back()->constant->type == AST_CONSTANT_FALSE
+				&& !function.is_valid_label(block[i]->instruction.label)
+				&& block[i - 1]->type == AST_STATEMENT_ASSIGNMENT
+				&& block[i - 1]->assignment.variables.size() == 1
+				&& block[i - 1]->assignment.variables.back().type == AST_VARIABLE_SLOT
+				&& block[i - 1]->assignment.expressions.size() == 1
+				&& get_constant_type(block[i - 1]->assignment.expressions.back())) {
+				//TODO
+				function.remove_jump(block[i]->instruction.id, block[i]->instruction.target);
+				block[i]->assignment.expressions.clear();
+				block[i]->type = AST_STATEMENT_GOTO;
+				block.emplace(block.begin() + i, new_statement(AST_STATEMENT_GOTO));
+				block[i]->instruction.type = Bytecode::BC_OP_JMP;
+				block[i]->instruction.id = block[i + 1]->instruction.id;
+				block[i + 1]->instruction.id++;
+				block[i]->instruction.target = block[i + 1]->instruction.id;
+				function.add_jump(block[i]->instruction.id, block[i]->instruction.target);
+				function.add_jump(block[i + 1]->instruction.id, block[i + 1]->instruction.target);
+				block[i + 1]->instruction.label = function.get_label_from_id(block[i + 1]->instruction.id);
+			}
+
 			continue;
 		case AST_STATEMENT_NUMERIC_FOR:
 		case AST_STATEMENT_GENERIC_FOR:
@@ -2463,7 +2493,7 @@ void Ast::build_multi_assignment(Function& function, std::vector<Statement*>& bl
 						&& block[i + block[i]->assignment.variables.size() - j]->assignment.expressions.size() == 1
 						&& block[i + block[i]->assignment.variables.size() - j]->assignment.expressions.back()->type == AST_EXPRESSION_VARIABLE
 						&& block[i + block[i]->assignment.variables.size() - j]->assignment.expressions.back()->variable->type == AST_VARIABLE_SLOT
-						&& block[i + block[i]->assignment.variables.size() - j]->assignment.expressions.back()->variable->slot == block[i]->assignment.variables[j].slot)
+						&& block[i + block[i]->assignment.variables.size() - j]->assignment.expressions.back()->variable->slotScope == block[i]->assignment.variables[j].slotScope)
 						continue;
 					isMultiAssignment = false;
 					break;
@@ -2516,7 +2546,7 @@ void Ast::build_multi_assignment(Function& function, std::vector<Statement*>& bl
 				&& block[i + 1]->assignment.expressions.size() == 1
 				&& block[i + 1]->assignment.expressions.back()->type == AST_EXPRESSION_VARIABLE
 				&& block[i + 1]->assignment.expressions.back()->variable->type == AST_VARIABLE_SLOT
-				&& block[i + 1]->assignment.expressions.back()->variable->slot == block[index - 1]->assignment.variables.back().slot) {
+				&& block[i + 1]->assignment.expressions.back()->variable->slotScope == block[index - 1]->assignment.variables.back().slotScope) {
 				if (block[i]->type == AST_STATEMENT_ASSIGNMENT) {
 					switch (block[i]->assignment.variables.back().type) {
 					case AST_VARIABLE_SLOT:
@@ -2583,7 +2613,7 @@ void Ast::build_multi_assignment(Function& function, std::vector<Statement*>& bl
 			&& block[i + 1]->assignment.expressions.size() == 1
 			&& block[i + 1]->assignment.expressions.back()->type == AST_EXPRESSION_VARIABLE
 			&& block[i + 1]->assignment.expressions.back()->variable->type == AST_VARIABLE_SLOT
-			&& block[i + 1]->assignment.expressions.back()->variable->slot == block[i - 1]->assignment.variables.back().slot) {
+			&& block[i + 1]->assignment.expressions.back()->variable->slotScope == block[i - 1]->assignment.variables.back().slotScope) {
 			function.slotScopeCollector.remove_scope(block[i - 1]->assignment.variables.back().slot, block[i - 1]->assignment.variables.back().slotScope);
 			block[i]->assignment.expressions.emplace(block[i]->assignment.expressions.begin(), block[i - 1]->assignment.expressions.back());
 			block[i]->assignment.variables.emplace(block[i]->assignment.variables.begin(), block[i + 1]->assignment.variables.back());
@@ -2604,7 +2634,7 @@ void Ast::build_multi_assignment(Function& function, std::vector<Statement*>& bl
 
 			if (block[i]->assignment.variables[j].tableIndex->type == AST_EXPRESSION_VARIABLE
 				&& block[i]->assignment.variables[j].tableIndex->variable->type == AST_VARIABLE_SLOT
-				&& block[i]->assignment.variables[j].tableIndex->variable->slot == block[i - 1]->assignment.variables.back().slot) {
+				&& block[i]->assignment.variables[j].tableIndex->variable->slotScope == block[i - 1]->assignment.variables.back().slotScope) {
 				function.slotScopeCollector.remove_scope(block[i - 1]->assignment.variables.back().slot, block[i - 1]->assignment.variables.back().slotScope);
 				block[i]->assignment.variables[j].tableIndex = block[i - 1]->assignment.expressions.back();
 				block[i]->instruction.label = block[i - 1]->instruction.label;
@@ -2614,7 +2644,7 @@ void Ast::build_multi_assignment(Function& function, std::vector<Statement*>& bl
 				continue;
 			}
 
-			if (block[i]->assignment.variables[j].table->type == AST_EXPRESSION_VARIABLE && block[i]->assignment.variables[j].table->variable->slot == block[i - 1]->assignment.variables.back().slot) {
+			if (block[i]->assignment.variables[j].table->type == AST_EXPRESSION_VARIABLE && block[i]->assignment.variables[j].table->variable->slotScope == block[i - 1]->assignment.variables.back().slotScope) {
 				function.slotScopeCollector.remove_scope(block[i - 1]->assignment.variables.back().slot, block[i - 1]->assignment.variables.back().slotScope);
 				block[i]->assignment.variables[j].table = block[i - 1]->assignment.expressions.back();
 				block[i]->instruction.label = block[i - 1]->instruction.label;
@@ -2625,9 +2655,65 @@ void Ast::build_multi_assignment(Function& function, std::vector<Statement*>& bl
 	}
 }
 
-void Ast::build_if_statements(Function& function, std::vector<Statement*>& block, BlockInfo* const& previousBlock) {
-	//TODO
+void Ast::build_if_statements_from_map(Function& function, std::vector<Statement*>& block, BlockInfo* const& previousBlock, std::unordered_map<Statement*, uint32_t>& offsetMap) {
+	BlockInfo blockInfo = { .block = block, .previousBlock = previousBlock };
+	uint32_t index;
 
+	for (uint32_t i = 0; i < block.size(); i++) {
+		switch (block[i]->type) {
+		case AST_STATEMENT_GOTO:
+			if (!offsetMap.contains(block[i])) continue;
+		case AST_STATEMENT_CONDITION:
+			function.remove_jump(block[i]->instruction.id, block[i]->instruction.target);
+			index = offsetMap[block[i]] + i;
+
+			if (block[i]->type == AST_STATEMENT_GOTO && block[i]->instruction.type == Bytecode::BC_OP_JMP) {
+				block[i]->type = AST_STATEMENT_EMPTY;
+				i++;
+				index++;
+				block.emplace(block.begin() + i, new_statement(AST_STATEMENT_GOTO));
+				block[i]->instruction.id = block[i - 1]->instruction.id;
+				block[i - 1]->instruction.id = INVALID_ID;
+			}
+
+			block[i]->block.reserve(index - i);
+			block[i]->block.insert(block[i]->block.begin(), block.begin() + i + 1, block.begin() + index + 1);
+			block.erase(block.begin() + i + 1, block.begin() + index + 1);
+
+			if (block[i]->type == AST_STATEMENT_CONDITION
+				&& block[i]->block.size()
+				&& block[i]->block.back()->type == AST_STATEMENT_GOTO
+				&& block[i]->block.back()->instruction.type != Bytecode::BC_OP_LOOP) {
+				index = offsetMap[block[i]->block.back()] + i;
+				block.emplace(block.begin() + i + 1, new_statement(AST_STATEMENT_ELSE));
+				block[i + 1]->block.reserve(index - i);
+				block[i + 1]->block.insert(block[i + 1]->block.begin(), block.begin() + i + 2, block.begin() + index + 2);
+				block.erase(block.begin() + i + 2, block.begin() + index + 2);
+				function.remove_jump(block[i]->block.back()->instruction.id, block[i]->block.back()->instruction.target);
+				block[i]->block.back()->type = AST_STATEMENT_EMPTY;
+				blockInfo.index = i + 1;
+				build_if_statements_from_map(function, block[i + 1]->block, &blockInfo, offsetMap);
+			}
+
+			if (block[i]->type == AST_STATEMENT_GOTO) block[i]->assignment.expressions.emplace_back(new_primitive(1));
+			block[i]->type = AST_STATEMENT_IF;
+			blockInfo.index = i;
+			build_if_statements_from_map(function, block[i]->block, &blockInfo, offsetMap);
+			continue;
+		case AST_STATEMENT_NUMERIC_FOR:
+		case AST_STATEMENT_GENERIC_FOR:
+			build_if_statements(function, block[i]->block, nullptr);
+			continue;
+		case AST_STATEMENT_LOOP:
+		case AST_STATEMENT_DECLARATION:
+			blockInfo.index = i;
+			build_if_statements(function, block[i]->block, &blockInfo);
+			continue;
+		}
+	}
+}
+
+void Ast::build_if_statements(Function& function, std::vector<Statement*>& block, BlockInfo* const& previousBlock) {
 	const auto build_if_false_statements = [&](std::vector<Statement*>& block, BlockInfo* const& previousBlock)->void {
 		BlockInfo blockInfo = { .block = block, .previousBlock = previousBlock };
 		uint32_t index, targetLabel;
@@ -2655,6 +2741,8 @@ void Ast::build_if_statements(Function& function, std::vector<Statement*>& block
 				block.emplace(block.begin() + i, new_statement(AST_STATEMENT_IF));
 				block[i]->instruction.id = block[i - 1]->instruction.id;
 				block[i - 1]->instruction.id = INVALID_ID;
+			} else {
+				block[i]->type = AST_STATEMENT_IF;
 			}
 
 			block[i]->assignment.expressions.emplace_back(new_primitive(1));
@@ -2706,34 +2794,70 @@ void Ast::build_if_statements(Function& function, std::vector<Statement*>& block
 
 	BlockInfo blockInfo = { .block = block, .previousBlock = previousBlock };
 	uint32_t index, targetLabel;
+	std::vector<uint32_t> indexes;
+	std::unordered_map<Statement*, uint32_t> offsetMap;
+
+	for (uint32_t i = 0; i < block.size(); i++) {
+		if (indexes.size()
+			&& (i == indexes.back()
+				|| block[i]->type != AST_STATEMENT_CONDITION)) {
+			blockInfo.index = i;
+			targetLabel = get_label_from_next_statement(function, blockInfo, false, false);
+			if (targetLabel == INVALID_ID || function.labels[targetLabel].target != block[indexes.back()]->instruction.target) targetLabel = get_label_from_next_statement(function, blockInfo, true, false);
+
+			if (targetLabel != INVALID_ID
+				&& function.labels[targetLabel].target == block[indexes.back()]->instruction.target
+				&& is_valid_block(function, blockInfo, block[indexes.back()]->instruction.id + (block[indexes.back()]->type == AST_STATEMENT_CONDITION ? 2 : 1))) {
+				offsetMap.emplace(block[indexes.back()], i - indexes.back());
+
+				if (i - indexes.back()
+					&& block[indexes.back()]->type == AST_STATEMENT_CONDITION
+					&& block[i]->type == AST_STATEMENT_GOTO
+					&& block[i]->instruction.type != Bytecode::BC_OP_LOOP) {
+					function.remove_jump(block[indexes.back()]->instruction.id, block[indexes.back()]->instruction.target);
+					indexes.emplace_back(i);
+					i--;
+					continue;
+				}
+
+				if (indexes.size() >= 2 && offsetMap.contains(block[indexes[indexes.size() - 2]])) {
+					indexes.pop_back();
+					function.add_jump(block[indexes.back()]->instruction.id, block[indexes.back()]->instruction.target);
+				}
+
+				indexes.pop_back();
+				i--;
+				continue;
+			}
+
+			if (i == indexes.back()) continue;
+		}
+
+		switch (block[i]->type) {
+		case AST_STATEMENT_GOTO:
+			if (block[i]->instruction.type == Bytecode::BC_OP_LOOP) continue;
+		case AST_STATEMENT_CONDITION:
+			if (offsetMap.contains(block[i])) continue;
+			indexes.emplace_back(i);
+			i--;
+		}
+	}
+
+	if (indexes.size() == 1
+		&& block[indexes.back()]->type == AST_STATEMENT_GOTO
+		&& indexes.back() == block.size() - 1
+		&& previousBlock
+		&& previousBlock->block[previousBlock->index]->type == AST_STATEMENT_LOOP)
+		indexes.pop_back();
+	if (!indexes.size()) return build_if_statements_from_map(function, block, previousBlock, offsetMap);
+
+	for (uint32_t i = indexes.size(); i--;) {
+		if (offsetMap.contains(block[indexes[i]])) function.add_jump(block[indexes[i]]->instruction.id, block[indexes[i]]->instruction.target);
+	}
 
 	for (uint32_t i = block.size(); i--;) {
 		switch (block[i]->type) {
 		case AST_STATEMENT_CONDITION:
-			if (i
-				&& block[i]->instruction.type == Bytecode::BC_OP_JMP
-				&& block[i]->assignment.expressions.back()->type == AST_EXPRESSION_CONSTANT
-				&& block[i]->assignment.expressions.back()->constant->type == AST_CONSTANT_FALSE
-				&& !function.is_valid_label(block[i]->instruction.label)
-				&& block[i - 1]->type == AST_STATEMENT_ASSIGNMENT
-				&& block[i - 1]->assignment.variables.size() == 1
-				&& block[i - 1]->assignment.variables.back().type == AST_VARIABLE_SLOT
-				&& block[i - 1]->assignment.expressions.size() == 1
-				&& get_constant_type(block[i - 1]->assignment.expressions.back())) {
-				function.remove_jump(block[i]->instruction.id, block[i]->instruction.target);
-				block[i]->assignment.expressions.clear();
-				block[i]->type = AST_STATEMENT_GOTO;
-				block.emplace(block.begin() + i, new_statement(AST_STATEMENT_GOTO));
-				block[i]->instruction.type = Bytecode::BC_OP_JMP;
-				block[i]->instruction.id = block[i + 1]->instruction.id;
-				block[i + 1]->instruction.id++;
-				block[i]->instruction.target = block[i + 1]->instruction.id;
-				function.add_jump(block[i]->instruction.id, block[i]->instruction.target);
-				function.add_jump(block[i + 1]->instruction.id, block[i + 1]->instruction.target);
-				block[i + 1]->instruction.label = function.get_label_from_id(block[i + 1]->instruction.id);
-				continue;
-			}
-
 			block[i]->type = AST_STATEMENT_IF;
 			targetLabel = INVALID_ID;
 
@@ -2741,10 +2865,8 @@ void Ast::build_if_statements(Function& function, std::vector<Statement*>& block
 				blockInfo.index = index;
 				targetLabel = get_label_from_next_statement(function, blockInfo, false, false);
 				if (targetLabel == INVALID_ID || function.labels[targetLabel].target != block[i]->instruction.target) targetLabel = get_label_from_next_statement(function, blockInfo, true, false);
-				if (targetLabel != INVALID_ID
-					&& function.labels[targetLabel].target == block[i]->instruction.target
-					&& is_valid_block(function, blockInfo, block[i]->instruction.id + 2))
-					break;
+				if (targetLabel == INVALID_ID) continue;
+				if (function.labels[targetLabel].target == block[i]->instruction.target && is_valid_block(function, blockInfo, block[i]->instruction.id + 2)) break;
 				targetLabel = INVALID_ID;
 			}
 
@@ -3096,12 +3218,22 @@ void Ast::clean_up_block(Function& function, std::vector<Statement*>& block, uin
 			i++;
 			blockInfo.index = i;
 			clean_up_block(function, block[i]->block, variableCounter, iteratorCounter, &blockInfo);
+			if (!block[i]->block.size()
+				&& block[i]->assignment.expressions.back()->type == AST_EXPRESSION_CONSTANT
+				&& block[i]->assignment.expressions.back()->constant->type == AST_CONSTANT_FALSE)
+				block[i]->type = AST_STATEMENT_EMPTY;
 			
 			if (i != block.size() - 1 && block[i + 1]->type == AST_STATEMENT_ELSE) {
 				i++;
 				blockInfo.index++;
 				clean_up_block(function, block[i]->block, variableCounter, iteratorCounter, &blockInfo);
 				blockInfo.index--;
+
+				if (!block[i]->block.size()) {
+					block[i]->type = AST_STATEMENT_EMPTY;
+				} else if (block[i - 1]->type == AST_STATEMENT_EMPTY) {
+					block[i - 1]->type = AST_STATEMENT_DO;
+				}
 			}
 
 			if (block[blockInfo.index - 1]) {

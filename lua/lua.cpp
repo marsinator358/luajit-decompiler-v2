@@ -158,7 +158,8 @@ void Lua::write_block(const Ast::Function& function, const std::vector<Ast::Stat
 			if (isFunctionDefinition) {
 				if (!previousLineIsEmpty) write(NEW_LINE);
 				write_indent();
-				write("local function ", (*block[i]->assignment.variables.back().slotScope)->name);
+				write("local function ");
+				write_variable(block[i]->assignment.variables.back(), false);
 				write_function_definition(*block[i]->assignment.expressions.back()->function, false);
 
 				if (i != block.size() - 1) {
@@ -688,6 +689,7 @@ void Lua::write_variable(const Ast::Variable& variable, const bool& isLineStart)
 	switch (variable.type) {
 	case Ast::AST_VARIABLE_SLOT:
 	case Ast::AST_VARIABLE_UPVALUE:
+		if (!(*variable.slotScope)->name.size()) throw;
 		write((*variable.slotScope)->name);
 		break;
 	case Ast::AST_VARIABLE_GLOBAL:
@@ -998,7 +1000,7 @@ void Lua::create_file() {
 
 		if (file != INVALID_HANDLE_VALUE) {
 			close_file();
-			assert(MessageBoxA(NULL, ("File " + filePath + " already exists.\n\nDo you want to overwrite it?").c_str(), PROGRAM_NAME, MB_ICONWARNING | MB_YESNO | MB_DEFBUTTON2) == IDYES,
+			assert(MessageBoxA(NULL, ("The file " + filePath + " already exists.\n\nDo you want to overwrite it?").c_str(), PROGRAM_NAME, MB_ICONWARNING | MB_YESNO | MB_DEFBUTTON2) == IDYES,
 				"File already exists", filePath, DEBUG_INFO);
 		}
 	}

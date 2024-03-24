@@ -45,7 +45,6 @@ void Bytecode::read_prototypes() {
 	while (buffer_next_block()) {
 		assert(fileBuffer.size() >= MIN_PROTO_SIZE, "Prototype is too short", filePath, DEBUG_INFO);
 		prototypes.emplace_back(new Prototype(*this));
-		prototypes.back()->prototypeSize = fileBuffer.size();
 		(*prototypes.back())(unlinkedPrototypes);
 		print_progress_bar(prototypesTotalSize - bytesUnread - 1, prototypesTotalSize);
 	}

@@ -3,14 +3,22 @@ Requirements:
   Visual Studio
   C++20
   Windows API
-  Default char is unsigned
-  Increased stack reserve size (e.g. 10MB)
+  Default char is unsigned (/J)
 */
+
+#ifndef _CHAR_UNSIGNED
+#error Default char is not unsigned!
+#endif
+
+#pragma comment(linker, "/stack:268435456")
+#pragma comment(linker, "/manifestdependency:\"type='win32' name='Microsoft.Windows.Common-Controls' version='6.0.0.0' processorArchitecture='*' publicKeyToken='6595b64144ccf1df' language='*'\"")
+#pragma comment(lib, "shlwapi.lib")
 
 #include <bit>
 #include <cmath>
 #include <cstdint>
 #include <string>
+#include <unordered_map>
 #include <vector>
 
 #include <windows.h>

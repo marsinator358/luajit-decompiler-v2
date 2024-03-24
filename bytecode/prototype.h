@@ -38,5 +38,4 @@ private:
 	TableConstant get_table_constant();
 
 	const Bytecode& bytecode;
-	uint32_t bufferPosition = 0;
 };

@@ -18,6 +18,8 @@ struct Ast::ConditionBuilder {
 			NOT_EQUAL,
 			TRUTHY_TEST,
 			FALSY_TEST,
+			BOOL_TRUTHY_TEST,
+			BOOL_FALSY_TEST,
 			UNCONDITIONAL,
 			AND,
 			OR,
@@ -41,6 +43,8 @@ struct Ast::ConditionBuilder {
 			{ 3, 3 },
 			{ 3, 2 },
 			{ 2, 3 },
+			{ 0, 0 },
+			{ 0, 0 },
 			{ 3, 3 },
 			{ 3, 0 },
 			{ 3, 0 },
@@ -159,16 +163,17 @@ struct Ast::ConditionBuilder {
 			for (uint32_t i = conditionNodes.size() - 1; i--;) {
 				switch (conditionNodes[i]->targetNode->type) {
 				case Node::END_TARGET:
-					if (conditionNodes[i]->type == Node::TRUTHY_TEST) {
-						conditionNodes[i]->targetNode = trueTarget;
-						trueTarget->incomingNodes++;
-						continue;
-					}
-
-					conditionNodes[i]->targetNode = falseTarget;
-					falseTarget->incomingNodes++;
+					conditionNodes[i]->targetNode = conditionNodes[i]->type == Node::TRUTHY_TEST ? trueTarget : falseTarget;
+					conditionNodes[i]->targetNode->incomingNodes++;
+					conditionNodes[i]->inverted = conditionNodes[i]->type == Node::FALSY_TEST;
+					continue;
+				case Node::TRUE_TARGET:
+					if (conditionNodes[i]->type == Node::TRUTHY_TEST) conditionNodes[i]->type = Node::BOOL_TRUTHY_TEST;
+					continue;
 				case Node::FALSE_TARGET:
+					if (conditionNodes[i]->type == Node::FALSY_TEST) conditionNodes[i]->type = Node::BOOL_FALSY_TEST;
 					conditionNodes[i]->inverted = true;
+					continue;
 				}
 			}
 
@@ -280,6 +285,10 @@ struct Ast::ConditionBuilder {
 			return node->inverted ? build_not((*node->expressions).back()) : (*node->expressions).back();
 		case Node::FALSY_TEST:
 			return node->inverted ? (*node->expressions).back() : build_not((*node->expressions).back());
+		case Node::BOOL_TRUTHY_TEST:
+			return node->inverted ? build_not((*node->expressions).back()) : build_not(build_not((*node->expressions).back()));
+		case Node::BOOL_FALSY_TEST:
+			return node->inverted ? build_not(build_not((*node->expressions).back())) : build_not((*node->expressions).back());
 		case Node::UNCONDITIONAL:
 			return ast.new_primitive(node->inverted ? 1 : 2);
 		case Node::AND:
