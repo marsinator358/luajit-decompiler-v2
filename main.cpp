@@ -1,6 +1,6 @@
 #include "main.h"
 
-struct Assertion {
+struct Error {
 	const std::string message;
 	const std::string filePath;
 	const std::string function;
@@ -85,7 +85,7 @@ static bool decompile_files_recursively(const Directory& directory) {
 			print("Writing lua source...");
 			lua();
 			print("Output file: " + lua.filePath);
-		} catch (const Assertion& assertion) {
+		} catch (const Error& assertion) {
 			erase_progress_bar();
 
 			if (arguments.silentAssertions) {
@@ -399,7 +399,7 @@ void erase_progress_bar() {
 }
 
 void assert(const bool& assertion, const std::string& message, const std::string& filePath, const std::string& function, const std::string& source, const uint32_t& line) {
-	if (!assertion) throw Assertion{
+	if (!assertion) throw Error{
 		.message = message,
 		.filePath = filePath,
 		.function = function,

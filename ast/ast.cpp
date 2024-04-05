@@ -995,7 +995,7 @@ void Ast::build_slot_scopes(Function& function, std::vector<Statement*>& block, 
 					assert(function.slotScopeCollector.slotInfos[k].activeSlotScope && function.slotScopeCollector.slotInfos[k].minScopeBegin == INVALID_ID,
 						"Slot scope does not match with variable debug info", bytecode.filePath, DEBUG_INFO);
 					block.emplace(block.begin() + i + 1, build_nil_assignment(k));
-					function.slotScopeCollector.complete_scope(k, block[i + 1]->assignment.variables.back().slotScope, block[i]->locals->scopeEnd);
+					function.slotScopeCollector.close_scope(k, block[i + 1]->assignment.variables.back().slotScope, block[i]->locals->scopeEnd);
 					if (k == block[i]->locals->baseSlot) break;
 				}
 
@@ -1017,7 +1017,7 @@ void Ast::build_slot_scopes(Function& function, std::vector<Statement*>& block, 
 					assert(function.slotScopeCollector.slotInfos[k].activeSlotScope && function.slotScopeCollector.slotInfos[k].minScopeBegin == INVALID_ID,
 						"Slot scope does not match with variable debug info", bytecode.filePath, DEBUG_INFO);
 					block[i]->block.emplace(block[i]->block.begin(), build_nil_assignment(k));
-					function.slotScopeCollector.complete_scope(k, block[i]->block.front()->assignment.variables.back().slotScope, block[i]->locals->scopeBegin);
+					function.slotScopeCollector.close_scope(k, block[i]->block.front()->assignment.variables.back().slotScope, block[i]->locals->scopeBegin);
 					if (k == block[i]->assignment.variables.back().slot + 1) break;
 				}
 
@@ -1375,7 +1375,7 @@ void Ast::build_slot_scopes(Function& function, std::vector<Statement*>& block, 
 		for (uint8_t j = block[i]->assignment.variables.size(); j--;) {
 			switch (block[i]->assignment.variables[j].type) {
 			case AST_VARIABLE_SLOT:
-				function.slotScopeCollector.complete_scope(block[i]->assignment.variables[j].slot, block[i]->assignment.variables[j].slotScope, id);
+				function.slotScopeCollector.close_scope(block[i]->assignment.variables[j].slot, block[i]->assignment.variables[j].slotScope, id);
 				continue;
 			case AST_VARIABLE_TABLE_INDEX:
 				function.slotScopeCollector.add_to_scope(block[i]->assignment.variables[j].table->variable->slot, block[i]->assignment.variables[j].table->variable->slotScope, id);
@@ -1394,7 +1394,7 @@ void Ast::build_slot_scopes(Function& function, std::vector<Statement*>& block, 
 		if (block[i]->type == AST_STATEMENT_DECLARATION && function.slotScopeCollector.slotInfos[block[i]->assignment.variables.back().slot].activeSlotScope) {
 			index = function.slotScopeCollector.slotInfos[block[i]->assignment.variables.back().slot].minScopeBegin;
 			function.slotScopeCollector.slotInfos[block[i]->assignment.variables.back().slot].minScopeBegin = INVALID_ID;
-			function.slotScopeCollector.complete_scope(block[i]->assignment.variables.back().slot, block[i]->assignment.variables.back().slotScope, id);
+			function.slotScopeCollector.close_scope(block[i]->assignment.variables.back().slot, block[i]->assignment.variables.back().slotScope, id);
 			(*block[i]->assignment.variables.back().slotScope)->usages--;
 			function.slotScopeCollector.slotInfos[block[i]->assignment.variables.back().slot].minScopeBegin = index;
 		}
@@ -3225,14 +3225,19 @@ void Ast::clean_up_block(Function& function, std::vector<Statement*>& block, uin
 			
 			if (i != block.size() - 1 && block[i + 1]->type == AST_STATEMENT_ELSE) {
 				i++;
-				blockInfo.index++;
-				clean_up_block(function, block[i]->block, variableCounter, iteratorCounter, &blockInfo);
-				blockInfo.index--;
 
-				if (!block[i]->block.size()) {
+				if (block[i - 1]->type == AST_STATEMENT_EMPTY) {
 					block[i]->type = AST_STATEMENT_EMPTY;
-				} else if (block[i - 1]->type == AST_STATEMENT_EMPTY) {
-					block[i - 1]->type = AST_STATEMENT_DO;
+					block.reserve(block.size() + block[i]->block.size());
+					block.insert(block.begin() + i + 1, block[i]->block.begin(), block[i]->block.begin() + block[i]->block.size());
+					block[i]->block.clear();
+					block[i]->block.shrink_to_fit();
+				} else {
+					blockInfo.index++;
+					clean_up_block(function, block[i]->block, variableCounter, iteratorCounter, &blockInfo);
+					blockInfo.index--;
+
+					if (!block[i]->block.size()) block[i]->type = AST_STATEMENT_EMPTY;
 				}
 			}
 
@@ -3540,7 +3545,7 @@ Ast::Expression* Ast::new_primitive(const uint8_t& primitive) {
 		expression->constant->type = AST_CONSTANT_TRUE;
 		break;
 	default:
-		throw;
+		throw nullptr;
 	}
 
 	return expression;
@@ -3650,7 +3655,7 @@ Ast::Expression* Ast::new_table(const Function& function, const uint16_t& index)
 				value = &stringFields[position].value;
 				break;
 			default:
-				throw;
+				throw nullptr;
 			}
 
 			*value = new_table_constant(function.get_constant(index).table[i].value);

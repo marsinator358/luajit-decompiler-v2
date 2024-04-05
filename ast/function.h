@@ -312,7 +312,7 @@ struct Ast::Function {
 			(*slotInfos[slot].activeSlotScope)->usages++;
 		}
 
-		void complete_scope(const uint8_t& slot, SlotScope**& slotScope, const uint32_t& id) {
+		void close_scope(const uint8_t& slot, SlotScope**& slotScope, const uint32_t& id) {
 			if (slotInfos[slot].isParameter
 				|| (slotInfos[slot].minScopeBegin != INVALID_ID
 					&& slotInfos[slot].minScopeBegin < id))
