@@ -1,4 +1,4 @@
-struct Ast::ConditionBuilder {
+struct ConditionBuilder {
 	enum TYPE {
 		ASSIGNMENT,
 		STATEMENT

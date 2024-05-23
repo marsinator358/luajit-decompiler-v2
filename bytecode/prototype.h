@@ -1,4 +1,4 @@
-class Bytecode::Prototype {
+class Prototype {
 public:
 
 	Prototype(const Bytecode& bytecode);

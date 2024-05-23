@@ -11,7 +11,11 @@ public:
 private:
 
 	static constexpr char UTF8_BOM[] = "\xEF\xBB\xBF";
+#ifdef _WIN32
 	static constexpr char NEW_LINE[] = "\r\n";
+#else
+	static constexpr char NEW_LINE[] = "\n";
+#endif
 
 	void write_header();
 	void write_block(const Ast::Function& function, const std::vector<Ast::Statement*>& block);
@@ -19,7 +23,7 @@ private:
 	void write_prefix_expression(const Ast::Expression& expression, const bool& isLineStart);
 	void write_variable(const Ast::Variable& variable, const bool& isLineStart);
 	void write_function_call(const Ast::FunctionCall& functionCall, const bool& isLineStart);
-	void write_assignment(const std::vector<Ast::Variable>& variables, const std::vector<Ast::Expression*>& expressions, const std::string& seperator, const bool& isLineStart);
+	void write_assignment(const std::vector<Ast::Variable>& variables, const std::vector<Ast::Expression*>& expressions, const std::string& separator, const bool& isLineStart);
 	void write_expression_list(const std::vector<Ast::Expression*>& expressions, const Ast::Expression* const& multres);
 	void write_function_definition(const Ast::Function& function, const bool& isMethod);
 	void write_number(const double& number);
@@ -38,7 +42,7 @@ private:
 	const bool forceOverwrite;
 	const bool minimizeDiffs;
 	const bool unrestrictedAscii;
-	HANDLE file = INVALID_HANDLE_VALUE;
+	std::ofstream file;
 	std::string writeBuffer;
 	uint32_t indentLevel = 0;
 	uint64_t prototypeDataLeft = 0;

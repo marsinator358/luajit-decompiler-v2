@@ -20,7 +20,7 @@ enum BC_KTAB {
 	BC_KTAB_STR  // string constant
 };
 
-struct Bytecode::TableConstant {
+struct TableConstant {
 	BC_KTAB type;
 
 	union {
@@ -31,7 +31,7 @@ struct Bytecode::TableConstant {
 	std::string string;
 };
 
-struct Bytecode::TableNode {
+struct TableNode {
 	TableConstant key;
 	TableConstant value;
 };
@@ -45,7 +45,7 @@ enum BC_KGC {
 	BC_KGC_STR // string constant
 };
 
-struct Bytecode::Constant {
+struct Constant {
 	BC_KGC type;
 	const Prototype* prototype = nullptr;
 	std::vector<TableConstant> array;
@@ -59,7 +59,7 @@ enum BC_KNUM {
 	BC_KNUM_NUM // number constant
 };
 
-struct Bytecode::NumberConstant {
+struct NumberConstant {
 	BC_KNUM type;
 	
 	union {
@@ -79,7 +79,7 @@ enum BC_VAR {
 	BC_VAR_STR // local variable name
 };
 
-struct Bytecode::VariableInfo {
+struct VariableInfo {
 	BC_VAR type;
 	std::string name;
 	bool isParameter = false;

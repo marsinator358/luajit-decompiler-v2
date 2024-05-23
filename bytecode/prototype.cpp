@@ -1,4 +1,4 @@
-#include "..\main.h"
+#include "../main.h"
 
 Bytecode::Prototype::Prototype(const Bytecode& bytecode) : bytecode(bytecode) {}
 
