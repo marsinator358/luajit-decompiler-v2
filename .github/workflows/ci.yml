@@ -30,7 +30,7 @@ jobs:
         if: matrix.os == 'ubuntu-latest'
         run: |
           sudo apt-get update
-          sudo apt-get install -y meson ninja-build
+          sudo apt-get install -y meson ninja-build luajit
           if [ "${{ matrix.cc }}" = "gcc" ]; then
             sudo apt-get install -y g++
           else
@@ -40,12 +40,13 @@ jobs:
       - name: Set up environment (macOS)
         if: matrix.os == 'macos-latest'
         run: |
-          brew install meson ninja
+          brew install meson ninja luajit
 
       - name: Set up environment (Windows)
         if: matrix.os == 'windows-latest'
         run: |
           pip install meson ninja
+          winget install -e --id DEVCOM.LuaJIT
 
       - name: Configure (Linux, GCC)
         if: matrix.os == 'ubuntu-latest' && matrix.cc == 'gcc'
