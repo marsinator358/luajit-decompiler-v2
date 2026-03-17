@@ -1,3 +1,5 @@
+#include <fstream>
+
 class Bytecode {
 public:
 
@@ -41,7 +43,7 @@ private:
 	uint32_t read_uleb128();
 	bool buffer_next_block();
 
-	HANDLE file = INVALID_HANDLE_VALUE;
+	std::ifstream* file = nullptr;
 	uint64_t fileSize = 0;
 	uint64_t bytesUnread = 0;
 	std::vector<uint8_t> fileBuffer;

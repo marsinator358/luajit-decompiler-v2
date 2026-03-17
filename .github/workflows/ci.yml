@@ -1,0 +1,78 @@
+name: CI
+
+on:
+  push:
+    branches: [master, main]
+  pull_request:
+    branches: [master, main]
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            cc: gcc
+          - os: ubuntu-latest
+            cc: clang
+          - os: macos-latest
+            cc: clang
+          - os: windows-latest
+            cc: msvc
+
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up environment (Linux)
+        if: matrix.os == 'ubuntu-latest'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y meson ninja-build
+          if [ "${{ matrix.cc }}" = "gcc" ]; then
+            sudo apt-get install -y g++
+          else
+            sudo apt-get install -y clang
+          fi
+
+      - name: Set up environment (macOS)
+        if: matrix.os == 'macos-latest'
+        run: |
+          brew install meson ninja
+
+      - name: Set up environment (Windows)
+        if: matrix.os == 'windows-latest'
+        run: |
+          pip install meson ninja
+
+      - name: Configure (Linux, GCC)
+        if: matrix.os == 'ubuntu-latest' && matrix.cc == 'gcc'
+        run: meson setup build --buildtype=release
+
+      - name: Configure (Linux, Clang)
+        if: matrix.os == 'ubuntu-latest' && matrix.cc == 'clang'
+        run: meson setup build --buildtype=release
+        env:
+          CC: clang
+          CXX: clang++
+
+      - name: Configure (macOS)
+        if: matrix.os == 'macos-latest'
+        run: meson setup build --buildtype=release
+
+      - name: Configure (Windows)
+        if: matrix.os == 'windows-latest'
+        run: meson setup build --buildtype=release
+        shell: bash
+
+      - name: Build
+        run: meson compile -C build
+
+      - name: Run (show usage)
+        run: |
+          exe=build/luajit-decompiler
+          [ "${{ runner.os }}" = "Windows" ] && exe=build/luajit-decompiler.exe
+          $exe -?
+        shell: bash

@@ -1,3 +1,5 @@
+#include <fstream>
+
 class Lua {
 public:
 
@@ -38,7 +40,7 @@ private:
 	const bool forceOverwrite;
 	const bool minimizeDiffs;
 	const bool unrestrictedAscii;
-	HANDLE file = INVALID_HANDLE_VALUE;
+	std::ofstream* file = nullptr;
 	std::string writeBuffer;
 	uint32_t indentLevel = 0;
 	uint64_t prototypeDataLeft = 0;
