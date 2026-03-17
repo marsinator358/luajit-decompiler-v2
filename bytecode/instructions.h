@@ -101,7 +101,7 @@ enum BC_OP {
 	BC_OP_INVALID
 };
 
-struct Bytecode::Instruction {
+struct Instruction {
 	BC_OP type;
 	uint8_t a = 0;
 	uint8_t b = 0;
