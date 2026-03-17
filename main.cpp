@@ -1,10 +1,14 @@
-
 #include "main.h"
 #include <dirent.h>
 #include <sys/stat.h>
-#include <unistd.h>
 #include <iostream>
 #include <cstring>
+#if defined(_WIN32)
+#include <windows.h>
+#include <direct.h>
+#else
+#include <unistd.h>
+#endif
 
 struct Error {
 	const std::string message;
@@ -78,7 +82,7 @@ static void find_files_recursively(Directory& directory) {
 
 static bool decompile_files_recursively(const Directory& directory) {
 	std::string outDir = arguments.outputPath + directory.path;
-	mkdir(outDir.c_str(), 0755);
+	std::filesystem::create_directory(outDir);
 	std::string outputFile;
 
 	for (uint32_t i = 0; i < directory.files.size(); i++) {
@@ -142,7 +146,7 @@ static char* parse_arguments(const int& argc, char** const& argv) {
 
 	std::string argument;
 
-	for (uint32_t i = isInputPathSet ? 2 : 1; i < argc; i++) {
+	for (int i = isInputPathSet ? 2 : 1; i < argc; i++) {
 		argument = argv[i];
 
 		if (argument.size() >= 2 && argument.front() == '-') {
@@ -264,22 +268,8 @@ int main(int argc, char* argv[]) {
 	struct stat pathStat;
 
 	if (!arguments.outputPath.size()) {
-		arguments.outputPath.resize(4096);
-		ssize_t count = readlink("/proc/self/exe", arguments.outputPath.data(), arguments.outputPath.size() - 1);
-		if (count != -1) {
-			arguments.outputPath[count] = '\0';
-			std::string exePath = arguments.outputPath.c_str();
-			size_t slash = exePath.find_last_of("/");
-			if (slash != std::string::npos) {
-				arguments.outputPath = exePath.substr(0, slash + 1);
-			} else {
-				arguments.outputPath = "./";
-			}
-		} else {
-			arguments.outputPath = "./";
-		}
-		arguments.outputPath += "output/";
-		arguments.outputPath.shrink_to_fit();
+		std::filesystem::path currentDir = std::filesystem::current_path();
+		arguments.outputPath = (currentDir / "output").string();
 	} else {
 		if (stat(arguments.outputPath.c_str(), &pathStat) != 0) {
 			print("Failed to open output path: " + arguments.outputPath);
