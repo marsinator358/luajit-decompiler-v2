@@ -70,9 +70,5 @@ jobs:
       - name: Build
         run: meson compile -C build
 
-      - name: Run (show usage)
-        run: |
-          exe=build/luajit-decompiler
-          [ "${{ runner.os }}" = "Windows" ] && exe=build/luajit-decompiler.exe
-          $exe -?
-        shell: bash
+      - name: Test
+        run: meson test -C build
