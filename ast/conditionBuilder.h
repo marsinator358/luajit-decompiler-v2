@@ -197,31 +197,42 @@ struct Ast::ConditionBuilder {
 
 	bool build_boolean_logic() {
 		for (uint32_t i = conditionNodes.size() - 1; --i;) {
-			if (conditionNodes[i - 1]->targetNode == conditionNodes[i] && conditionNodes[i]->incomingNodes == 1) {
-				if (Node::TYPE_PREFERENCE[conditionNodes[i - 1]->type][conditionNodes[i - 1]->inverted] != 3) invert_node(conditionNodes[i - 1]);
-				conditionNodes[i - 1]->leftNode = copy_node(conditionNodes[i - 1]);
-				conditionNodes[i - 1]->rightNode = new_node(Node::UNCONDITIONAL);
-				conditionNodes[i - 1]->rightNode->inverted = conditionNodes[i - 1]->inverted;
-				conditionNodes[i - 1]->type = conditionNodes[i - 1]->inverted ? Node::AND : Node::OR;
-				merge_nodes(conditionNodes[i - 1], conditionNodes[i]);
-				conditionNodes[i - 1]->type = conditionNodes[i - 1]->leftNode->inverted ? (conditionNodes[i - 1]->inverted ? Node::NOT_OR : Node::OR) : (conditionNodes[i - 1]->inverted ? Node::NOT_AND : Node::AND);
-				conditionNodes[i - 1]->leftNode->inverted = false;
-				conditionNodes.erase(conditionNodes.begin() + i);
-				i = conditionNodes.size() - 1;
-			} else if (!conditionNodes[i]->incomingNodes) {
-				if (conditionNodes[i - 1]->targetNode == conditionNodes[i]->targetNode) {
-					if (conditionNodes[i - 1]->inverted != conditionNodes[i]->inverted && !invert_any_node(conditionNodes[i - 1], conditionNodes[i])) return false;
-					merge_nodes(conditionNodes[i - 1], conditionNodes[i]);
-					conditionNodes[i - 1]->type = conditionNodes[i - 1]->inverted ? Node::NOT_AND : Node::OR;
-					conditionNodes.erase(conditionNodes.begin() + i);
-					i = conditionNodes.size() - 1;
-				} else if (conditionNodes[i - 1]->targetNode == conditionNodes[i + 1]) {
+			if (!conditionNodes[i]->incomingNodes) {
+				if (conditionNodes[i - 1]->targetNode == conditionNodes[i + 1]) {
 					if (conditionNodes[i - 1]->inverted == conditionNodes[i]->inverted && !invert_any_node(conditionNodes[i - 1], conditionNodes[i])) return false;
 					merge_nodes(conditionNodes[i - 1], conditionNodes[i]);
 					conditionNodes[i - 1]->type = conditionNodes[i - 1]->inverted ? Node::NOT_OR : Node::AND;
 					conditionNodes.erase(conditionNodes.begin() + i);
 					i = conditionNodes.size() - 1;
+				} else if (conditionNodes[i - 1]->targetNode == conditionNodes[i]->targetNode) {
+					if (conditionNodes[i - 1]->inverted != conditionNodes[i]->inverted && !invert_any_node(conditionNodes[i - 1], conditionNodes[i])) return false;
+					merge_nodes(conditionNodes[i - 1], conditionNodes[i]);
+					conditionNodes[i - 1]->type = conditionNodes[i - 1]->inverted ? Node::NOT_AND : Node::OR;
+					conditionNodes.erase(conditionNodes.begin() + i);
+					i = conditionNodes.size() - 1;
+				} else if (conditionNodes[i]->targetNode == conditionNodes[i + 1]) {
+					conditionNodes[i]->leftNode = copy_node(conditionNodes[i]);
+					conditionNodes[i]->rightNode = new_node(Node::UNCONDITIONAL);
+					conditionNodes[i]->inverted = conditionNodes[i - 1]->inverted;
+					if (conditionNodes[i]->leftNode->inverted == conditionNodes[i]->inverted) invert_node(conditionNodes[i]->leftNode);
+					conditionNodes[i]->rightNode->inverted = !conditionNodes[i]->inverted;
+					conditionNodes[i]->type = conditionNodes[i]->inverted ? Node::NOT_OR : Node::AND;
+					std::swap<Node*>(conditionNodes[i]->targetNode, conditionNodes[i - 1]->targetNode);
+					merge_nodes(conditionNodes[i - 1], conditionNodes[i]);
+					conditionNodes[i - 1]->type = conditionNodes[i - 1]->inverted ? Node::NOT_AND : Node::OR;
+					conditionNodes.erase(conditionNodes.begin() + i);
+					i = conditionNodes.size() - 1;
 				}
+			} else if (conditionNodes[i]->incomingNodes == 1 && conditionNodes[i - 1]->targetNode == conditionNodes[i]) {
+				if (Node::TYPE_PREFERENCE[conditionNodes[i - 1]->type][conditionNodes[i - 1]->inverted] != 3) invert_node(conditionNodes[i - 1]);
+				conditionNodes[i - 1]->leftNode = copy_node(conditionNodes[i - 1]);
+				conditionNodes[i - 1]->rightNode = new_node(Node::UNCONDITIONAL);
+				conditionNodes[i - 1]->rightNode->inverted = conditionNodes[i - 1]->inverted;
+				conditionNodes[i - 1]->type = conditionNodes[i - 1]->inverted ? Node::NOT_AND : Node::OR;
+				merge_nodes(conditionNodes[i - 1], conditionNodes[i]);
+				conditionNodes[i - 1]->type = conditionNodes[i - 1]->leftNode->inverted ? (conditionNodes[i - 1]->inverted ? Node::NOT_OR : Node::OR) : (conditionNodes[i - 1]->inverted ? Node::NOT_AND : Node::AND);
+				conditionNodes.erase(conditionNodes.begin() + i);
+				i = conditionNodes.size() - 1;
 			}
 		}
 
