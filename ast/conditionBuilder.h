@@ -20,7 +20,8 @@ struct Ast::ConditionBuilder {
 			FALSY_TEST,
 			BOOL_TRUTHY_TEST,
 			BOOL_FALSY_TEST,
-			UNCONDITIONAL,
+			UNCONDITIONAL_TRUE,
+			UNCONDITIONAL_FALSE,
 			AND,
 			OR,
 			NOT_AND,
@@ -43,8 +44,9 @@ struct Ast::ConditionBuilder {
 			{ 3, 3 },
 			{ 3, 2 },
 			{ 2, 3 },
-			{ 0, 0 },
-			{ 0, 0 },
+			{},
+			{},
+			{ 3, 3 },
 			{ 3, 3 },
 			{ 3, 0 },
 			{ 3, 0 },
@@ -57,6 +59,7 @@ struct Ast::ConditionBuilder {
 		uint32_t nodeLabel = INVALID_ID;
 		uint32_t targetLabel = INVALID_ID;
 		Node* targetNode = nullptr;
+		bool hasAlternateTarget = false;
 		uint32_t incomingNodes = 0;
 		bool inverted = false;
 		std::vector<Expression*>* expressions = nullptr;
@@ -113,22 +116,24 @@ struct Ast::ConditionBuilder {
 		case Bytecode::BC_OP_ISF:
 			return Node::FALSY_TEST;
 		case Bytecode::BC_OP_JMP:
-			return Node::UNCONDITIONAL;
+			return Node::UNCONDITIONAL_TRUE;
 		default:
 			throw nullptr;
 		}
 	}
 
-	void add_node(const Node::TYPE& type, const uint32_t& nodeLabel, const uint32_t& targetLabel, std::vector<Expression*>* const& expressions) {
+	void add_node(const Node::TYPE& type, const uint32_t& nodeLabel, const uint32_t& targetLabel, std::vector<Expression*>* const& expressions, const bool& hasAlternateTarget = false) {
 		conditionNodes.emplace_back(new_node(type));
 		conditionNodes.back()->nodeLabel = nodeLabel;
 		conditionNodes.back()->targetLabel = targetLabel;
 		conditionNodes.back()->expressions = expressions;
+		conditionNodes.back()->hasAlternateTarget = hasAlternateTarget;
 	}
 
 	bool link_nodes() {
 		switch (type) {
 		case ASSIGNMENT:
+			endAssignment = conditionNodes.back();
 			conditionNodes.emplace_back(falseTarget);
 			conditionNodes.emplace_back(trueTarget);
 			conditionNodes.emplace_back(endTarget);
@@ -185,7 +190,7 @@ struct Ast::ConditionBuilder {
 
 			if (conditionNodes[conditionNodes.size() - 2]->inverted) break;
 			conditionNodes[conditionNodes.size() - 2]->leftNode = copy_node(conditionNodes[conditionNodes.size() - 2]);
-			conditionNodes[conditionNodes.size() - 2]->rightNode = new_node(Node::UNCONDITIONAL);
+			conditionNodes[conditionNodes.size() - 2]->rightNode = new_node(Node::UNCONDITIONAL_TRUE);
 			conditionNodes[conditionNodes.size() - 2]->targetNode->incomingNodes--;
 			conditionNodes[conditionNodes.size() - 2]->targetNode = falseTarget;
 			conditionNodes[conditionNodes.size() - 2]->targetNode->incomingNodes++;
@@ -198,39 +203,63 @@ struct Ast::ConditionBuilder {
 	bool build_boolean_logic() {
 		for (uint32_t i = conditionNodes.size() - 1; --i;) {
 			if (!conditionNodes[i]->incomingNodes) {
-				if (conditionNodes[i - 1]->targetNode == conditionNodes[i + 1]) {
-					if (conditionNodes[i - 1]->inverted == conditionNodes[i]->inverted && !invert_any_node(conditionNodes[i - 1], conditionNodes[i])) return false;
-					merge_nodes(conditionNodes[i - 1], conditionNodes[i]);
-					conditionNodes[i - 1]->type = conditionNodes[i - 1]->inverted ? Node::NOT_OR : Node::AND;
-					conditionNodes.erase(conditionNodes.begin() + i);
-					i = conditionNodes.size() - 1;
-				} else if (conditionNodes[i - 1]->targetNode == conditionNodes[i]->targetNode) {
+				if (conditionNodes[i - 1]->targetNode == conditionNodes[i]->targetNode) {
 					if (conditionNodes[i - 1]->inverted != conditionNodes[i]->inverted && !invert_any_node(conditionNodes[i - 1], conditionNodes[i])) return false;
 					merge_nodes(conditionNodes[i - 1], conditionNodes[i]);
 					conditionNodes[i - 1]->type = conditionNodes[i - 1]->inverted ? Node::NOT_AND : Node::OR;
 					conditionNodes.erase(conditionNodes.begin() + i);
 					i = conditionNodes.size() - 1;
+				} else if (conditionNodes[i - 1]->targetNode == conditionNodes[i + 1]) {
+					if (conditionNodes[i - 1]->inverted == conditionNodes[i]->inverted && !invert_any_node(conditionNodes[i - 1], conditionNodes[i])) return false;
+					merge_nodes(conditionNodes[i - 1], conditionNodes[i]);
+					conditionNodes[i - 1]->type = conditionNodes[i - 1]->inverted ? Node::NOT_OR : Node::AND;
+					conditionNodes.erase(conditionNodes.begin() + i);
+					i = conditionNodes.size() - 1;
 				} else if (conditionNodes[i]->targetNode == conditionNodes[i + 1]) {
+					if (conditionNodes[i - 1]->targetNode->type < Node::END_TARGET && Node::TYPE_PREFERENCE[conditionNodes[i - 1]->type][conditionNodes[i - 1]->inverted] != 3) invert_node(conditionNodes[i - 1]);
+					if (conditionNodes[i - 1]->inverted == conditionNodes[i]->inverted) invert_node(conditionNodes[i]);
 					conditionNodes[i]->leftNode = copy_node(conditionNodes[i]);
-					conditionNodes[i]->rightNode = new_node(Node::UNCONDITIONAL);
-					conditionNodes[i]->inverted = conditionNodes[i - 1]->inverted;
-					if (conditionNodes[i]->leftNode->inverted == conditionNodes[i]->inverted) invert_node(conditionNodes[i]->leftNode);
-					conditionNodes[i]->rightNode->inverted = !conditionNodes[i]->inverted;
+					conditionNodes[i]->rightNode = new_node(Node::UNCONDITIONAL_FALSE);
+					conditionNodes[i]->inverted = !conditionNodes[i]->inverted;
+					conditionNodes[i]->rightNode->inverted = conditionNodes[i]->inverted;
 					conditionNodes[i]->type = conditionNodes[i]->inverted ? Node::NOT_OR : Node::AND;
 					std::swap<Node*>(conditionNodes[i]->targetNode, conditionNodes[i - 1]->targetNode);
+					conditionNodes[i]->hasAlternateTarget = conditionNodes[i - 1]->hasAlternateTarget;
 					merge_nodes(conditionNodes[i - 1], conditionNodes[i]);
 					conditionNodes[i - 1]->type = conditionNodes[i - 1]->inverted ? Node::NOT_AND : Node::OR;
 					conditionNodes.erase(conditionNodes.begin() + i);
 					i = conditionNodes.size() - 1;
+				} else if (conditionNodes[i]->hasAlternateTarget
+					&& (conditionNodes[i - 1]->targetNode == endAssignment
+						|| conditionNodes[i + 1] == endAssignment)) {
+					conditionNodes[i]->targetNode->incomingNodes--;
+					conditionNodes[i]->targetNode = endAssignment;
+					endAssignment->incomingNodes++;
+					i++;
+				} else if (conditionNodes[i]->targetNode == endAssignment && conditionNodes[i - 1]->hasAlternateTarget) {
+					conditionNodes[i - 1]->targetNode->incomingNodes--;
+					conditionNodes[i - 1]->targetNode = endAssignment;
+					endAssignment->incomingNodes++;
+					i++;
 				}
 			} else if (conditionNodes[i]->incomingNodes == 1 && conditionNodes[i - 1]->targetNode == conditionNodes[i]) {
 				if (Node::TYPE_PREFERENCE[conditionNodes[i - 1]->type][conditionNodes[i - 1]->inverted] != 3) invert_node(conditionNodes[i - 1]);
 				conditionNodes[i - 1]->leftNode = copy_node(conditionNodes[i - 1]);
-				conditionNodes[i - 1]->rightNode = new_node(Node::UNCONDITIONAL);
+				conditionNodes[i - 1]->rightNode = new_node(Node::UNCONDITIONAL_FALSE);
+				conditionNodes[i - 1]->inverted = !conditionNodes[i - 1]->inverted;
 				conditionNodes[i - 1]->rightNode->inverted = conditionNodes[i - 1]->inverted;
-				conditionNodes[i - 1]->type = conditionNodes[i - 1]->inverted ? Node::NOT_AND : Node::OR;
-				merge_nodes(conditionNodes[i - 1], conditionNodes[i]);
-				conditionNodes[i - 1]->type = conditionNodes[i - 1]->leftNode->inverted ? (conditionNodes[i - 1]->inverted ? Node::NOT_OR : Node::OR) : (conditionNodes[i - 1]->inverted ? Node::NOT_AND : Node::AND);
+				conditionNodes[i - 1]->type = conditionNodes[i - 1]->inverted ? Node::NOT_OR : Node::AND;
+				conditionNodes[i - 1]->hasAlternateTarget = conditionNodes[i]->hasAlternateTarget;
+				if (conditionNodes[i]->targetNode->type < Node::END_TARGET && Node::TYPE_PREFERENCE[conditionNodes[i]->type][conditionNodes[i]->inverted] != 3) invert_node(conditionNodes[i]);
+
+				if (conditionNodes[i - 1]->inverted == conditionNodes[i]->inverted) {
+					merge_nodes(conditionNodes[i - 1], conditionNodes[i]);
+					conditionNodes[i - 1]->type = conditionNodes[i - 1]->inverted ? Node::NOT_AND : Node::OR;
+				} else {
+					merge_nodes(conditionNodes[i - 1], conditionNodes[i]);
+					conditionNodes[i - 1]->type = conditionNodes[i - 1]->inverted ? Node::NOT_OR : Node::AND;
+				}
+
 				conditionNodes.erase(conditionNodes.begin() + i);
 				i = conditionNodes.size() - 1;
 			}
@@ -273,6 +302,7 @@ struct Ast::ConditionBuilder {
 		node->rightNode = targetNode;
 		node->targetNode->incomingNodes--;
 		node->targetNode = targetNode->targetNode;
+		if (!targetNode->hasAlternateTarget) node->hasAlternateTarget = false;
 		node->inverted = targetNode->inverted;
 	}
 
@@ -300,8 +330,10 @@ struct Ast::ConditionBuilder {
 			return node->inverted ? build_not((*node->expressions).back()) : build_not(build_not((*node->expressions).back()));
 		case Node::BOOL_FALSY_TEST:
 			return node->inverted ? build_not(build_not((*node->expressions).back())) : build_not((*node->expressions).back());
-		case Node::UNCONDITIONAL:
+		case Node::UNCONDITIONAL_TRUE:
 			return ast.new_primitive(node->inverted ? 1 : 2);
+		case Node::UNCONDITIONAL_FALSE:
+			return ast.new_primitive(node->inverted ? 2 : 1);
 		case Node::AND:
 		case Node::OR:
 			return node->inverted ? build_not(build_binary(node->type, build_expression(node->leftNode), build_expression(node->rightNode)))
@@ -377,6 +409,7 @@ struct Ast::ConditionBuilder {
 	Ast& ast;
 	std::vector<Node*> nodes;
 	std::vector<Node*> conditionNodes;
+	Node* endAssignment = nullptr;
 	Node* endTarget = nullptr;
 	Node* trueTarget = nullptr;
 	Node* falseTarget = nullptr;
