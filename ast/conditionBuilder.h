@@ -163,41 +163,43 @@ struct Ast::ConditionBuilder {
 	}
 
 	void fix_return_nodes() {
-		switch (type) {
-		case ASSIGNMENT:
-			for (uint32_t i = conditionNodes.size() - 1; i--;) {
-				switch (conditionNodes[i]->targetNode->type) {
-				case Node::END_TARGET:
-					conditionNodes[i]->targetNode = conditionNodes[i]->type == Node::TRUTHY_TEST ? trueTarget : falseTarget;
-					conditionNodes[i]->targetNode->incomingNodes++;
-					conditionNodes[i]->inverted = conditionNodes[i]->type == Node::FALSY_TEST;
+		for (uint32_t i = conditionNodes.size() - 1; i--;) {
+			switch (conditionNodes[i]->targetNode->type) {
+			case Node::END_TARGET:
+				conditionNodes[i]->targetNode = conditionNodes[i]->type == Node::TRUTHY_TEST ? trueTarget : falseTarget;
+				conditionNodes[i]->targetNode->incomingNodes++;
+				conditionNodes[i]->inverted = conditionNodes[i]->type == Node::FALSY_TEST;
+				continue;
+			case Node::FALSE_TARGET:
+				conditionNodes[i]->inverted = true;
+			case Node::TRUE_TARGET:
+				if (type == STATEMENT) continue;
+
+				switch (conditionNodes[i]->type) {
+				case Node::TRUTHY_TEST:
+					conditionNodes[i]->type = Node::BOOL_TRUTHY_TEST;
 					continue;
-				case Node::TRUE_TARGET:
-					if (conditionNodes[i]->type == Node::TRUTHY_TEST) conditionNodes[i]->type = Node::BOOL_TRUTHY_TEST;
-					continue;
-				case Node::FALSE_TARGET:
-					if (conditionNodes[i]->type == Node::FALSY_TEST) conditionNodes[i]->type = Node::BOOL_FALSY_TEST;
-					conditionNodes[i]->inverted = true;
+				case Node::FALSY_TEST:
+					conditionNodes[i]->type = Node::BOOL_FALSY_TEST;
 					continue;
 				}
-			}
 
-			break;
-		case STATEMENT:
-			for (uint32_t i = conditionNodes.size() - 1; i--;) {
-				if (conditionNodes[i]->targetNode->type == Node::FALSE_TARGET) conditionNodes[i]->inverted = true;
+				continue;
+			default:
+				if (Node::TYPE_PREFERENCE[conditionNodes[i]->type][conditionNodes[i]->inverted] != 3) conditionNodes[i]->inverted = true;
+				continue;
 			}
-
-			if (conditionNodes[conditionNodes.size() - 2]->inverted) break;
-			conditionNodes[conditionNodes.size() - 2]->leftNode = copy_node(conditionNodes[conditionNodes.size() - 2]);
-			conditionNodes[conditionNodes.size() - 2]->rightNode = new_node(Node::UNCONDITIONAL_TRUE);
-			conditionNodes[conditionNodes.size() - 2]->targetNode->incomingNodes--;
-			conditionNodes[conditionNodes.size() - 2]->targetNode = falseTarget;
-			conditionNodes[conditionNodes.size() - 2]->targetNode->incomingNodes++;
-			conditionNodes[conditionNodes.size() - 2]->type = Node::NOT_OR;
-			conditionNodes[conditionNodes.size() - 2]->inverted = true;
-			break;
 		}
+
+		if (type != STATEMENT || conditionNodes[conditionNodes.size() - 2]->inverted) return;
+		conditionNodes[conditionNodes.size() - 2]->leftNode = copy_node(conditionNodes[conditionNodes.size() - 2]);
+		conditionNodes[conditionNodes.size() - 2]->rightNode = new_node(Node::UNCONDITIONAL_FALSE);
+		conditionNodes[conditionNodes.size() - 2]->rightNode->inverted = true;
+		conditionNodes[conditionNodes.size() - 2]->targetNode->incomingNodes--;
+		conditionNodes[conditionNodes.size() - 2]->targetNode = falseTarget;
+		conditionNodes[conditionNodes.size() - 2]->targetNode->incomingNodes++;
+		conditionNodes[conditionNodes.size() - 2]->type = Node::NOT_OR;
+		conditionNodes[conditionNodes.size() - 2]->inverted = true;
 	}
 
 	bool build_boolean_logic() {
@@ -216,7 +218,6 @@ struct Ast::ConditionBuilder {
 					conditionNodes.erase(conditionNodes.begin() + i);
 					i = conditionNodes.size() - 1;
 				} else if (conditionNodes[i]->targetNode == conditionNodes[i + 1]) {
-					if (conditionNodes[i - 1]->targetNode->type < Node::END_TARGET && Node::TYPE_PREFERENCE[conditionNodes[i - 1]->type][conditionNodes[i - 1]->inverted] != 3) invert_node(conditionNodes[i - 1]);
 					if (conditionNodes[i - 1]->inverted == conditionNodes[i]->inverted) invert_node(conditionNodes[i]);
 					conditionNodes[i]->leftNode = copy_node(conditionNodes[i]);
 					conditionNodes[i]->rightNode = new_node(Node::UNCONDITIONAL_FALSE);
@@ -243,14 +244,12 @@ struct Ast::ConditionBuilder {
 					i++;
 				}
 			} else if (conditionNodes[i]->incomingNodes == 1 && conditionNodes[i - 1]->targetNode == conditionNodes[i]) {
-				if (Node::TYPE_PREFERENCE[conditionNodes[i - 1]->type][conditionNodes[i - 1]->inverted] != 3) invert_node(conditionNodes[i - 1]);
 				conditionNodes[i - 1]->leftNode = copy_node(conditionNodes[i - 1]);
 				conditionNodes[i - 1]->rightNode = new_node(Node::UNCONDITIONAL_FALSE);
 				conditionNodes[i - 1]->inverted = !conditionNodes[i - 1]->inverted;
 				conditionNodes[i - 1]->rightNode->inverted = conditionNodes[i - 1]->inverted;
 				conditionNodes[i - 1]->type = conditionNodes[i - 1]->inverted ? Node::NOT_OR : Node::AND;
 				conditionNodes[i - 1]->hasAlternateTarget = conditionNodes[i]->hasAlternateTarget;
-				if (conditionNodes[i]->targetNode->type < Node::END_TARGET && Node::TYPE_PREFERENCE[conditionNodes[i]->type][conditionNodes[i]->inverted] != 3) invert_node(conditionNodes[i]);
 
 				if (conditionNodes[i - 1]->inverted == conditionNodes[i]->inverted) {
 					merge_nodes(conditionNodes[i - 1], conditionNodes[i]);
@@ -271,7 +270,25 @@ struct Ast::ConditionBuilder {
 
 	static bool invert_any_node(Node* const& leftNode, Node* const& rightNode) {
 		if (leftNode->targetNode->type < Node::END_TARGET) {
-			invert_node(rightNode->targetNode->type > Node::END_TARGET || Node::TYPE_PREFERENCE[leftNode->type][!leftNode->inverted] >= Node::TYPE_PREFERENCE[rightNode->type][!rightNode->inverted] ? leftNode : rightNode);
+			if (rightNode->targetNode->type < Node::END_TARGET) {
+				auto calculate_score = [](const auto& self, Node* const& node)->int32_t {
+					switch (node->type) {
+					case Node::AND:
+					case Node::OR:
+					case Node::NOT_AND:
+					case Node::NOT_OR:
+						return self(self, node->leftNode) + self(self, node->rightNode);
+					}
+
+					return Node::TYPE_PREFERENCE[node->type][!node->inverted] - Node::TYPE_PREFERENCE[node->type][node->inverted];
+				};
+
+				int32_t leftScore = calculate_score(calculate_score, leftNode);
+				int32_t rightScore = calculate_score(calculate_score, rightNode);
+				invert_node((leftScore > 0 ? leftScore >= rightScore : leftScore > rightScore) ? leftNode : rightNode);
+			} else {
+				invert_node(leftNode);
+			}
 		} else {
 			if (rightNode->targetNode->type > Node::END_TARGET) return false;
 			invert_node(rightNode);
