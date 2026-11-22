@@ -1,6 +1,6 @@
 static constexpr uint16_t BC_OP_JMP_BIAS = 0x8000;
 
-enum BC_OP {
+enum BC_OP : uint8_t {
 	BC_OP_ISLT, // if A<VAR> < D<VAR> then JMP
 	BC_OP_ISGE, // if not (A<VAR> < D<VAR>) then JMP
 	BC_OP_ISLE, // if A<VAR> <= D<VAR> then JMP
@@ -90,6 +90,13 @@ enum BC_OP {
 	BC_OP_ILOOP, // unsupported
 	BC_OP_JLOOP, // unsupported
 	BC_OP_JMP, // goto D<JUMP> or if true then JMP or goto ITERC at D
+	BC_OP_BNOT, // A<DST> = ~D<VAR>
+	BC_OP_BAND, // A<DST> = B<VAR> & C<VAR>
+	BC_OP_BOR, // A<DST> = B<VAR> | C<VAR>
+	BC_OP_BXOR, // A<DST> = B<VAR> ~ C<VAR>
+	BC_OP_BSHL, // A<DST> = B<VAR> << C<VAR>
+	BC_OP_BSHR, // A<DST> = B<VAR> >> C<VAR>
+	BC_OP_BSAR, // A<DST> = B<VAR> ~>> C<VAR>
 	BC_OP_FUNCF, // unsupported
 	BC_OP_IFUNCF, // unsupported
 	BC_OP_JFUNCF, // unsupported
@@ -101,52 +108,21 @@ enum BC_OP {
 	BC_OP_INVALID
 };
 
-struct Bytecode::Instruction {
+struct Instruction {
 	BC_OP type;
-	uint8_t a = 0;
-	uint8_t b = 0;
-	uint8_t c = 0;
-	uint16_t d = 0;
+#ifdef _DEBUG
+	uint32_t pc;
+#endif
+	uint8_t a;
+
+	union {
+		struct {
+			uint8_t c;
+			uint8_t b;
+		};
+
+		uint16_t d;
+	};
+
+	uint32_t line;
 };
-
-static BC_OP get_op_type(const uint8_t& byte, const uint8_t& version) {
-	return (BC_OP)(version == Bytecode::BC_VERSION_1 && byte >= BC_OP_ISTYPE ? (byte >= BC_OP_TGETR - 2 ? (byte >= BC_OP_TSETR - 3 ? byte + 4 : byte + 3) : byte + 2) : byte);
-}
-
-static bool is_op_abc_format(const BC_OP& instruction) {
-	switch (instruction) {
-	case BC_OP_ADDVN:
-	case BC_OP_SUBVN:
-	case BC_OP_MULVN:
-	case BC_OP_DIVVN:
-	case BC_OP_MODVN:
-	case BC_OP_ADDNV:
-	case BC_OP_SUBNV:
-	case BC_OP_MULNV:
-	case BC_OP_DIVNV:
-	case BC_OP_MODNV:
-	case BC_OP_ADDVV:
-	case BC_OP_SUBVV:
-	case BC_OP_MULVV:
-	case BC_OP_DIVVV:
-	case BC_OP_MODVV:
-	case BC_OP_POW:
-	case BC_OP_CAT:
-	case BC_OP_TGETV:
-	case BC_OP_TGETS:
-	case BC_OP_TGETB:
-	case BC_OP_TGETR:
-	case BC_OP_TSETV:
-	case BC_OP_TSETS:
-	case BC_OP_TSETB:
-	case BC_OP_TSETR:
-	case BC_OP_CALLM:
-	case BC_OP_CALL:
-	case BC_OP_ITERC:
-	case BC_OP_ITERN:
-	case BC_OP_VARG:
-		return true;
-	}
-
-	return false;
-}

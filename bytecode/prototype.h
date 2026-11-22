@@ -1,41 +1,48 @@
 class Bytecode::Prototype {
+	friend Bytecode;
+
 public:
 
-	Prototype(const Bytecode& bytecode);
-
-	void operator()(std::vector<Prototype*>& unlinkedPrototypes);
-
 	struct {
-		uint8_t flags = 0;
+		bool child = false;
+		bool vararg = false;
+		bool ffi = false;
+		bool bitop = false;
 		uint8_t parameters = 0;
 		uint8_t framesize = 0;
-		bool hasDebugInfo = false;
+		bool debugInfo = false;
 		uint32_t firstLine = 0;
 		uint32_t lineCount = 0;
 	} header;
 
+	uint32_t prototypeBytes = 0;
 	std::vector<Instruction> instructions;
-	std::vector<uint16_t> upvalues;
+	std::vector<Upvalue> upvalues;
 	std::vector<Constant> constants;
 	std::vector<NumberConstant> numberConstants;
-	std::vector<uint32_t> lineMap;
-	std::vector<std::string> upvalueNames;
-	std::vector<VariableInfo> variableInfos;
-	uint32_t prototypeSize = 0;
+	std::vector<DebugInfo> debugInfo;
 
 private:
 
+	Prototype(const Bytecode& bytecode);
+	~Prototype();
+
+	void operator()(std::vector<Prototype*>& unlinkedPrototypes);
 	void read_header();
 	void read_instructions();
 	void read_upvalues();
 	void read_constants(std::vector<Prototype*>& unlinkedPrototypes);
 	void read_number_constants();
 	void read_debug_info();
-	uint8_t get_next_byte();
+	TableConstant get_table_constant();
+	std::string get_string();
 	uint32_t get_uleb128();
 	uint32_t get_uleb128_33();
-	std::string get_string();
-	TableConstant get_table_constant();
+	uint8_t get_uint8();
+	uint16_t get_uint16();
+	uint32_t get_uint32();
+	template<typename Type>
+	Type get_bytes();
 
 	const Bytecode& bytecode;
 };

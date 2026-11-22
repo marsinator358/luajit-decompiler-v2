@@ -2,48 +2,39 @@ class Bytecode {
 public:
 
 	class Prototype;
-	struct Constant;
-	struct NumberConstant;
-	struct TableConstant;
-	struct TableNode;
-	struct VariableInfo;
-	struct Instruction;
-	#include "prototype.h"
+	friend Prototype;
+
 	#include "constants.h"
 	#include "instructions.h"
 
-	Bytecode(const std::string& filePath);
+	Bytecode(const HANDLE& file);
 	~Bytecode();
 
 	void operator()();
 
-	const std::string filePath;
-
 	struct {
 		uint8_t version = 0;
-		uint8_t flags = 0;
-		std::string chunkname;
+		bool bigEndian = false;
+		bool stripped = false;
+		bool ffi = false;
+		bool fr2 = false;
+		bool bitop = false;
+		std::string name;
 	} header;
 
 	const Prototype* main = nullptr;
-	uint64_t prototypesTotalSize = 0;
+	uint64_t totalPrototypeBytes = 0;
 
 private:
 
-	static constexpr uint8_t MIN_PROTO_SIZE = 11;
-	static constexpr uint8_t MIN_FILE_SIZE = MIN_PROTO_SIZE + 7;
-
 	void read_header();
 	void read_prototypes();
-	void open_file();
-	void close_file();
-	void read_file(const uint32_t& byteCount);
-	uint32_t read_uleb128();
-	bool buffer_next_block();
+	bool read_uleb128();
+	void read_bytes(const uint32_t& bytes);
 
-	HANDLE file = INVALID_HANDLE_VALUE;
-	uint64_t fileSize = 0;
-	uint64_t bytesUnread = 0;
-	std::vector<uint8_t> fileBuffer;
+	const HANDLE& file;
 	std::vector<Prototype*> prototypes;
+	std::vector<uint8_t> buffer;
 };
+
+#include "prototype.h"

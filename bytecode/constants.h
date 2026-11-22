@@ -5,38 +5,49 @@ static constexpr uint8_t BC_F_BE = 0x01;
 static constexpr uint8_t BC_F_STRIP = 0x02;
 static constexpr uint8_t BC_F_FFI = 0x04;
 static constexpr uint8_t BC_F_FR2 = 0x08;
+static constexpr uint8_t BC_F_BITOP = 0x10;
+
 static constexpr uint8_t BC_PROTO_CHILD = 0x01;
 static constexpr uint8_t BC_PROTO_VARARG = 0x02;
 static constexpr uint8_t BC_PROTO_FFI = 0x04;
+static constexpr uint8_t BC_PROTO_BITOP = 0x80;
+
 static constexpr uint16_t BC_UV_IMMUTABLE = 0x4000;
 static constexpr uint16_t BC_UV_LOCAL = 0x8000;
 
-enum BC_KTAB {
+struct Upvalue {
+	bool immutable = false;
+	bool local = false;
+	uint8_t slot = 0;
+	std::string name;
+};
+
+enum BC_KTAB : uint32_t {
 	BC_KTAB_NIL, // primitive nil
 	BC_KTAB_FALSE, // primitive false
 	BC_KTAB_TRUE, // primitive true
 	BC_KTAB_INT, // integer constant
 	BC_KTAB_NUM, // number constant
-	BC_KTAB_STR  // string constant
+	BC_KTAB_STR // string constant
 };
 
-struct Bytecode::TableConstant {
+struct TableConstant {
 	BC_KTAB type;
 
 	union {
 		uint32_t integer;
-		uint64_t number = 0;
+		uint64_t number;
 	};
 
 	std::string string;
 };
 
-struct Bytecode::TableNode {
+struct TableNode {
 	TableConstant key;
 	TableConstant value;
 };
 
-enum BC_KGC {
+enum BC_KGC : uint32_t {
 	BC_KGC_CHILD, // child prototype
 	BC_KGC_TAB, // table constant
 	BC_KGC_I64, // signed integer cdata constant
@@ -45,30 +56,34 @@ enum BC_KGC {
 	BC_KGC_STR // string constant
 };
 
-struct Bytecode::Constant {
+struct Constant {
 	BC_KGC type;
-	const Prototype* prototype = nullptr;
+
+	union {
+		const Prototype* prototype;
+		uint64_t cdata;
+	};
+
 	std::vector<TableConstant> array;
 	std::vector<TableNode> table;
-	uint64_t cdata = 0;
 	std::string string;
 };
 
-enum BC_KNUM {
+enum BC_KNUM : uint8_t {
 	BC_KNUM_INT, // integer constant
 	BC_KNUM_NUM // number constant
 };
 
-struct Bytecode::NumberConstant {
+struct NumberConstant {
 	BC_KNUM type;
-	
+
 	union {
 		uint32_t integer;
-		uint64_t number = 0;
+		uint64_t number;
 	};
 };
 
-enum BC_VAR {
+enum BC_VAR : uint8_t {
 	BC_VAR_END, // end of variable info
 	BC_VAR_FOR_IDX, // for numeric loop index
 	BC_VAR_FOR_STOP, // for numeric loop limit
@@ -79,10 +94,10 @@ enum BC_VAR {
 	BC_VAR_STR // local variable name
 };
 
-struct Bytecode::VariableInfo {
+struct DebugInfo {
 	BC_VAR type;
 	std::string name;
-	bool isParameter = false;
+	bool parameter = false;
 	uint32_t scopeBegin = 0;
 	uint32_t scopeEnd = 0;
 };
