@@ -43,12 +43,10 @@ constexpr uint64_t DOUBLE_NEGATIVE_ZERO = DOUBLE_SIGN;
 
 static struct {
 	bool constDeclaration = false;
-	bool continueStatement = false;
+	bool continueStatement = true;
 	bool customaryOperators = false;
-	bool disableSyntaxExtensions = false;
 	bool enableUTF8 = false;
 	bool forceOverwrite = false;
-	bool formatStrings = false;
 	bool gotoIsKeyword = false;
 	bool ignoreDebugInfo = false;
 	bool minimizeDiffs = false;
@@ -57,7 +55,7 @@ static struct {
 	bool showHelp = false;
 	bool silentAssertions = false;
 	bool sortTables = false;
-	bool stringDumpCompatibility = false;
+	bool syntaxExtensions = true;
 	uint32_t threadCount = 0;
 	std::vector<std::wstring> inputPaths;
 	std::wstring outputPath;

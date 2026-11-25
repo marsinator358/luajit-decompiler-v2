@@ -46,9 +46,9 @@ void Ast::build_function(Function& function, uint32_t& counter, const uint32_t& 
 	assert(!build_local_scopes(function, function.block), L"Failed to build local scopes from debug info", DEBUG_INFO);
 	build_expressions(function, function.block);
 	build_slot_scopes(function, function.block);
-	eliminate_slots(function, function.block);
 	function.slotScopeCollector.verify_scopes_closed();
 	function.verify_upvalue_scopes();
+	eliminate_slots(function, function.block);
 
 	for (size_t i = function.childFunctions.size(); i--;) {
 		build_function(*function.childFunctions[i], counter, level + 1);
@@ -1046,12 +1046,16 @@ void Ast::build_slot_scopes(Function& function, Block& block, const size_t& begi
 			while (i--) {
 				switch (block[i].type) {
 				case AST_STATEMENT_CONDITION:
-					if ((*block[i].block.back().target != extendedTargetLabel->target
-							|| block[i].instruction->type != Bytecode::BC_OP_ISNEP)
+					if (*block[i].block.back().target != extendedTargetLabel->target
 						&& (!targetLabel
 							|| *block[i].block.back().target != targetLabel->target))
 						continue;
-					if (block[i].assignment.expressions.size() != 1 || block[i].instruction->type != Bytecode::BC_OP_ISNEP) return;
+					if (block[i].assignment.expressions.size() == 1
+						? !targetLabel || *block[i].block.back().target != targetLabel->target
+						: block[i].instruction->type != Bytecode::BC_OP_ISNEP
+							|| *block[i].block.back().target != extendedTargetLabel->target
+							|| block[i].instruction->d)
+						return;
 					conditionBlockBorders.emplace_back(i + 1);
 
 					if (block[i].block.size() == 2) {
@@ -1365,14 +1369,14 @@ void Ast::eliminate_slots(Function& function, Block& block) {
 	auto get_next_assignment = [&](const size_t& index, const bool& ignoreIndex = false)->size_t {
 		if (!index) return INVALID_ID;
 		Label* targetLabel = function.get_label_from_id(block[index - 1].block.get_end_id(), true, ignoreIndex);
-		if (!targetLabel) return INVALID_ID;
 		size_t next = index;
 
 		while (--next && block[next].type == AST_STATEMENT_CONDITION) {
 			if (block[next].block.size() == 2
 				|| ((*block[next].block.back().target <= block[next].id
 						|| *block[next].block.back().target > block[index - 1].id)
-					&& *block[next].block.back().target != targetLabel->target))
+					&& (!targetLabel
+						|| *block[next].block.back().target != targetLabel->target)))
 				return INVALID_ID;
 		}
 
@@ -1471,15 +1475,13 @@ void Ast::eliminate_slots(Function& function, Block& block) {
 			&& block[upperIndex].assignment.expressions.back()->type == AST_EXPRESSION_TABLE
 			&& (!block[upperIndex].assignment.expressions.back()->table->fields.size()
 				|| !block[upperIndex].assignment.expressions.back()->table->fields.back().value->isMultres)) {
-			if (block[upperIndex].assignment.variables.back().type == AST_VARIABLE_SLOT) {
-				for (size_t i = upperIndex + 1; i < lowerIndex; i++) {
-					if (block[i].assignment.usedLocals.contains(block[upperIndex].assignment.variables.back().slot)) return false;
-				}
+			for (size_t i = upperIndex + 1; i < lowerIndex; i++) {
+				if (block[i].assignment.usedLocals.contains(block[upperIndex].assignment.variables.back().slot)) return false;
 			}
 
 			mergeDownwards = false;
-			block[upperIndex].assignment.expressions.back()->table->fields.emplace_back(Table::Field { .key = new_expression(AST_EXPRESSION_CONSTANT),
-				.value = block[upperIndex].assignment.expressions.back()->table->constants.list.size() ? block[upperIndex].assignment.expressions.back()->table->constants.list[0] : new_primitive(0)});
+			block[upperIndex].assignment.expressions.back()->table->fields.emplace_back(Table::Field{ .key = new_expression(AST_EXPRESSION_CONSTANT),
+				.value = block[upperIndex].assignment.expressions.back()->table->constants.list.size() ? block[upperIndex].assignment.expressions.back()->table->constants.list[0] : new_primitive(0) });
 			block[upperIndex].assignment.expressions.back()->table->fields.back().key->constant->type = AST_CONSTANT_NUMBER;
 			block[upperIndex].assignment.expressions.back()->table->fields.back().key->constant->number = 0;
 			expression = &block[upperIndex].assignment.expressions.back()->table->fields.back().value;
@@ -1719,11 +1721,13 @@ void Ast::eliminate_slots(Function& function, Block& block) {
 		case AST_STATEMENT_LOCAL:
 			eliminate_slots(function, block[i].block);
 			continue;
+		case AST_STATEMENT_CONDITION:
 		case AST_STATEMENT_ASSIGNMENT:
 			size_t next = get_next_assignment(i);
-			if (next == INVALID_ID) continue;
 
-			if ((block[i].assignment.variables.back().type == AST_VARIABLE_TABLE_INDEX
+			if (next != INVALID_ID
+				&& block[i].type == AST_STATEMENT_ASSIGNMENT
+				&& (block[i].assignment.variables.back().type == AST_VARIABLE_TABLE_INDEX
 					|| block[i].assignment.variables.back().type == AST_VARIABLE_TABLE_MULTRES)
 				&& block[next].assignment.variables.back().type == AST_VARIABLE_SLOT
 				&& block[next].assignment.variables.back().slot == block[i].assignment.variables.back().table->variable->slot) {
@@ -1763,7 +1767,88 @@ void Ast::eliminate_slots(Function& function, Block& block) {
 				}
 			}
 
-			//TODO
+			next = get_next_assignment(i + 1, true);
+			if (next == INVALID_ID || block[next].assignment.variables.back().type != AST_VARIABLE_SLOT) continue;
+			i++;
+			uint8_t targetSlot = block[next].assignment.variables.back().slot;
+			SlotScope* targetSlotScope = *block[next].assignment.variables.back().slotScope;
+
+			for (Label* targetLabel = function.get_label_from_id(block[i - 1].block.get_end_id(), false, true), *extendedTargetLabel = function.get_label_from_id(block[i - 1].block.get_end_id(), true, true);
+				extendedTargetLabel;
+				targetLabel = function.get_label_from_id(block[i - 1].block.get_end_id(), false, true), extendedTargetLabel = function.get_label_from_id(block[i - 1].block.get_end_id(), true, true)) {
+				if (arguments.syntaxExtensions) {
+					bool success = false;
+
+					for (size_t j = next; j--;) {
+						switch (block[j].type) {
+						case AST_STATEMENT_CONDITION:
+							if (*block[j].block.back().target != extendedTargetLabel->target) {
+								if (block[j].block.size() == 2
+									|| *block[j].block.back().target <= block[j].id
+									|| *block[j].block.back().target > block[next].id)
+									break;
+								continue;
+							}
+
+							if (block[j].instruction->type != Bytecode::BC_OP_ISNEP
+								|| block[j].instruction->d
+								|| block[j].instruction->a != targetSlot
+								|| function.is_valid_label(block[j + 1].label))
+								break;
+							
+							{
+								size_t top = targetSlotScope->scopeBegin == block[next].id ? j : get_next_assignment(j);
+								if (top == INVALID_ID
+									|| (j != top
+										&& (targetSlotScope->scopeBegin != block[top].id
+											|| function.is_valid_label(block[top + 1].label))))
+									break;
+
+								for (size_t k = top; k < i; k++) {
+									if (block[k].assignment.usedLocals.contains(targetSlot)
+										&& (k != j
+											|| j == top))
+										top = INVALID_ID;
+								}
+
+								if (top == INVALID_ID
+									|| !try_eliminate_condition(next, i)
+									|| !try_eliminate_condition(j, next, &block[next].assignment.expressions.back())
+									|| (j != top
+										&& !try_eliminate_condition(top, j)))
+									break;
+								Expression* expression = new_expression(AST_EXPRESSION_BINARY_OPERATION);
+								expression->binaryOperation->type = AST_BINARY_NIL_COALESCING;
+								expression->binaryOperation->leftOperand = block[top].assignment.expressions.back();
+								expression->binaryOperation->rightOperand = block[i - 1].assignment.expressions.back();
+								block[i - 1].assignment.expressions.back() = expression;
+								function.remove_jump(block[j].block.back());
+								if (j != top) targetSlotScope->usages -= 2;
+
+								while (i - 1 > top) {
+									block.merge(i);
+									i--;
+								}
+
+								success = true;
+							}
+
+							break;
+						case AST_STATEMENT_GOTO:
+							if (*block[j].target != extendedTargetLabel->target) break;
+							break;
+						}
+
+						break;
+					}
+
+					if (success) continue;
+				}
+
+				break;
+			}
+
+			i--;
 			continue;
 		}
 	}

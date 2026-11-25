@@ -56,8 +56,6 @@ void Ast::Block::merge(const size_t& index, const bool& mergeAbove) {
 	size_t mergedIndex = mergeAbove ? index - 1 : index + 1;
 	if (mergeAbove) statements[index]->label = statements[mergedIndex]->label;
 	statements[index]->assignment.usedLocals.merge(statements[mergedIndex]->assignment.usedLocals);
-	statements[mergedIndex]->reference = statements[index];
-	function.mergedStatements[statements[index]].emplace_back(&statements[mergedIndex]->reference);
 
 	if (function.mergedStatements.contains(statements[mergedIndex])) {
 		for (size_t i = function.mergedStatements[statements[mergedIndex]].size(); i--;) {
@@ -68,11 +66,16 @@ void Ast::Block::merge(const size_t& index, const bool& mergeAbove) {
 		function.mergedStatements.erase(statements[mergedIndex]);
 	}
 
-	//erase(mergedIndex);
 	size_t masterIndex = get_master_index(mergedIndex);
-	function.masterBlock.erase(function.masterBlock.begin() + masterIndex);
+
+	for (size_t i = masterIndex + statements[mergedIndex]->block.size() + 1; i-- && i >= masterIndex;) {
+		function.masterBlock[i]->reference = statements[index];
+		function.mergedStatements[statements[index]].emplace_back(&function.masterBlock[i]->reference);
+		function.masterBlock[i]->id = INVALID_ID;
+		function.masterBlock.erase(function.masterBlock.begin() + i);
+	}
+
 	update_statements(masterIndex);
-	statements[mergedIndex]->id = INVALID_ID;
 	statements.erase(statements.begin() + mergedIndex);
 }
 
